@@ -6,3 +6,8 @@ __pycache__/
 .DS_Store
 config.local.toml
 .env
+
+# Keep the starter example world in version control; local worlds stay private.
+/worlds/*
+!/worlds/ember_hollow/
+!/worlds/ember_hollow/**
