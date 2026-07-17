@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import platform
+import shlex
 import sqlite3
 import sys
 import textwrap
@@ -13,11 +14,13 @@ from typing import Callable, TextIO
 
 from . import __version__
 from .content.loader import load_world
+from .content.models import LoadedWorld
 from .errors import LocalAdventureError, ModelError
 from .app.game_service import GameService
 from .app.turn_service import TurnService
 from .context.builder import ContextAssembly
 from .context.formatter import format_state
+from .export.session_exporter import SessionExporter
 from .llm.lm_studio import LMStudioBackend
 from .paths import runtime_root
 from .lore.indexer import reindex_world
@@ -65,9 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     play_group.add_argument("--world", type=Path)
     play_parser.add_argument("--scenario")
     play_parser.add_argument("--name", default="First Journey")
-    # Export formatting belongs to Milestone 9.  Keep these command shapes
-    # visible now so the terminal interface is complete without pre-building it.
-    export_parser = subparsers.add_parser("export", help="export a session (available in Milestone 9)")
+    export_parser = subparsers.add_parser("export", help="export a session transcript and state")
     export_parser.add_argument("--session", required=True)
     export_parser.add_argument("--format", required=True, choices=("markdown", "json"))
     export_parser.add_argument("--output", required=True, type=Path)
@@ -219,6 +220,20 @@ def run_sessions_create(world_path: Path, scenario_id: str | None, name: str, ou
     return 0
 
 
+def run_export(session_id: str, export_format: str, output_path: Path, output: TextIO | None = None) -> int:
+    """Export a persisted session using its authored world's current display metadata."""
+    output = output or sys.stdout
+    connection = _connection()
+    try:
+        session = SessionRepository(connection).get(session_id)
+        world = load_world(Path(WorldRepository(connection).source_path(session.world_id)))
+        SessionExporter(connection, world).write(session_id, export_format, output_path)
+    finally:
+        connection.close()
+    print(f"Exported {export_format}: {output_path}", file=output)
+    return 0
+
+
 def _wrap(text: str, output: TextIO) -> str:
     if not output.isatty():
         return text
@@ -346,7 +361,7 @@ def play_game(
                         for error in turn_service.last_error.validation_errors:
                             print(f"- {error}", file=output)
                 elif command.startswith("/export "):
-                    print("Export is not available until Milestone 9.", file=output)
+                    _run_in_game_export(command, session.session_id, connection, world, output)
                 else:
                     print("Unknown command. Type /help for available commands.", file=output)
                 continue
@@ -399,7 +414,25 @@ _HELP = """Commands:
 /help  /quit  /state  /where  /inventory  /history [N]
 /context  /context full  /undo  /branch NAME  /checkpoint NAME  /restore NAME
 /sessions  /reload  /debug on|off|last-error
-/export markdown PATH  /export json PATH (available in Milestone 9)"""
+/export markdown PATH  /export json PATH"""
+
+
+def _run_in_game_export(command: str, session_id: str, connection: sqlite3.Connection, world: LoadedWorld, output: TextIO) -> None:
+    """Parse and execute the narrow in-game export command without CLI state mutation."""
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        print("Usage: /export markdown PATH or /export json PATH", file=output)
+        return
+    if len(parts) != 3 or parts[1] not in {"markdown", "json"}:
+        print("Usage: /export markdown PATH or /export json PATH", file=output)
+        return
+    try:
+        SessionExporter(connection, world).write(session_id, parts[1], Path(parts[2]))
+    except LocalAdventureError as error:
+        print(f"Error: {error}", file=output)
+        return
+    print(f"Exported {parts[1]}: {parts[2]}", file=output)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -420,8 +453,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "play":
             return play_game(world_path=args.world, session_id=args.session, scenario_id=args.scenario, name=args.name)
         if args.command == "export":
-            print("Export is not available until Milestone 9.")
-            return 2
+            return run_export(args.session, args.format, args.output)
     except (LocalAdventureError, ValueError) as error:
         print(f"Error: {error}")
         return 2

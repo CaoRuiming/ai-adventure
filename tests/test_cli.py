@@ -60,6 +60,23 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(cli.main(["sessions", "list"]), 0)
             self.assertIn("CLI Test", output.getvalue())
 
+    def test_export_command_writes_json_for_a_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"LOCAL_ADVENTURE_HOME": temporary}):
+            output_path = Path(temporary) / "session.json"
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(cli.main(["sessions", "create", "--world", "worlds/ember_hollow", "--name", "Export Test"]), 0)
+            connection = open_connection(Path(temporary) / "local-adventure.sqlite3")
+            try:
+                apply_migrations(connection)
+                session_id = SessionRepository(connection).list_all()[0].session_id
+            finally:
+                connection.close()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(cli.main(["export", "--session", session_id, "--format", "json", "--output", str(output_path)]), 0)
+            self.assertTrue(output_path.exists())
+            self.assertIn('"export_schema_version": 1', output_path.read_text(encoding="utf-8"))
+
     @patch("local_adventure.cli.LMStudioBackend.generate")
     def test_play_dispatches_commands_and_autosaves_a_valid_turn(self, generate: object) -> None:
         generate.return_value = ModelResponse(

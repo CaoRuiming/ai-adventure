@@ -64,7 +64,15 @@ This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
   - Export command shapes are visible but intentionally report that exports
     arrive in Milestone 9, where their required formats are specified.
   - Acceptance commands: offline checks passed on 2026-07-17 (55 tests).
-- [ ] Milestone 9 — Export, documentation, and release hardening
+- [x] Milestone 9 — Export, documentation, and release hardening
+  - Added privacy-safe Markdown and JSON exports for current session history,
+    replayed state, and named checkpoints. Exports omit prompts, system
+    instructions, model-call audit records, and raw model responses.
+  - Completed architecture, data-model, authoring, privacy/security, and
+    troubleshooting documentation; added the 0.1.0 changelog entry; and added
+    an offline scripted end-to-end test covering turn history, undo, branch,
+    and export.
+  - Acceptance commands: all passed on 2026-07-17 (59 offline tests).
 
 ## Verification
 
@@ -104,7 +112,7 @@ Additional Milestone 1 behavior check:
 - `python -m local_adventure doctor` — PASS (placeholder diagnostic)
 
 Most recent passing test command: `python -m unittest discover -s tests -v`
-(55 tests, 2026-07-17).
+(59 tests, 2026-07-17).
 
 Milestone 4 acceptance and required repository commands, run with `.venv`
 activated:
@@ -162,3 +170,19 @@ activated:
 - Manual LM Studio play acceptance was not run because no local LM Studio server
   or configured token was available. Offline CLI tests cover the loop,
   autosave, EOF, and model-request cancellation paths.
+
+Milestone 9 acceptance commands, run with `.venv` activated:
+
+- `python -m unittest discover -s tests -v` — PASS (59 tests; no live model
+  calls)
+- `python -m compileall local_adventure tests` — PASS
+- `python -m local_adventure doctor` — PASS for local engine checks; the
+  configured LM Studio token and endpoint were unavailable and correctly
+  reported as warnings.
+- `python -m local_adventure validate-world --world worlds/ember_hollow` — PASS
+- `python -m local_adventure sessions create --world worlds/ember_hollow --name
+  "Release Test"` — PASS
+
+Manual Milestone 9 acceptance remains pending a configured local LM Studio
+server. The scripted integration test covers two turns, undo, branching,
+reopening/exporting both histories, and current-state verification offline.

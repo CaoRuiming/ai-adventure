@@ -240,6 +240,14 @@ class CheckpointRepository:
             raise CheckpointNotFoundError(f"checkpoint '{name}' does not exist for this session")
         return CheckpointRecord(**dict(row))
 
+    def list_for_session(self, session_id: str) -> list[CheckpointRecord]:
+        """Return a session's named checkpoints in stable creation order."""
+        rows = self.connection.execute(
+            "SELECT * FROM named_checkpoints WHERE session_id = ? ORDER BY created_at, checkpoint_id",
+            (session_id,),
+        ).fetchall()
+        return [CheckpointRecord(**dict(row)) for row in rows]
+
 
 class ModelCallRepository:
     """Persist privacy-conscious, append-only model-call audit metadata."""
