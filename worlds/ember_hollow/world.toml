@@ -1,0 +1,38 @@
+schema_version = 1
+id = "ember_hollow"
+title = "Ember Hollow"
+description = "A compact demonstration world."
+default_scenario = "opening"
+
+[model]
+backend = "lm_studio"
+base_url = "http://127.0.0.1:1234"
+name = "replace-with-a-local-model"
+temperature = 0.8
+max_output_tokens = 1400
+timeout_seconds = 180
+api_token_env = "LM_STUDIO_API_TOKEN"
+
+[context]
+max_chars = 60000
+system_chars = 12000
+state_chars = 12000
+recent_turns_chars = 18000
+lore_chars = 12000
+skills_chars = 4000
+maximum_recent_turns = 12
+maximum_lore_documents = 8
+maximum_skills = 4
+
+[gameplay]
+maximum_events_per_turn = 12
+maximum_repair_attempts = 1
+relationship_minimum = -100
+relationship_maximum = 100
+stat_delta_limit = 20
+
+[audit]
+store_prompts = false
+store_prompt_hashes = true
+store_raw_model_responses = true
+log_level = "INFO"

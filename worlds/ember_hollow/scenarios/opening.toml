@@ -1,0 +1,14 @@
+schema_version = 1
+id = "opening"
+title = "Ash Above the Observatory"
+opening_narration = """
+Ash drifts through the broken dome as Mark studies the sealed brass mechanism.
+"""
+player_actor_id = "player"
+starting_location_id = "observatory"
+active_actor_ids = ["player", "mark"]
+active_quest_ids = []
+
+[initial_flags]
+met_mark = true
+west_gate_open = false

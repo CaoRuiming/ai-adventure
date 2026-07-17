@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import argparse
 import platform
+from pathlib import Path
 
 from . import __version__
+from .content.loader import load_world
+from .errors import LocalAdventureError
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -24,6 +27,11 @@ def build_parser() -> argparse.ArgumentParser:
         "doctor",
         help="run the Milestone 1 environment diagnostic placeholder",
     )
+    validate_parser = subparsers.add_parser(
+        "validate-world",
+        help="load and validate an authored world",
+    )
+    validate_parser.add_argument("--world", required=True, type=Path, help="path to the world directory")
     return parser
 
 
@@ -39,12 +47,33 @@ def run_doctor() -> int:
     return 0
 
 
+def run_validate_world(world_path: Path) -> int:
+    """Validate one world and print its authored-content summary."""
+    world = load_world(world_path)
+    print(f"World valid: {world.config.title} ({world.config.id})")
+    print(
+        "Counts: "
+        f"actors={len(world.actors)}, locations={len(world.locations)}, "
+        f"items={len(world.items)}, quests={len(world.quests)}, "
+        f"lore files={len(world.lore_documents)}, skills={len(world.skills)}"
+    )
+    for warning in world.warnings:
+        print(f"[WARN] {warning}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and dispatch the commands implemented so far."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command == "doctor":
-        return run_doctor()
+    try:
+        if args.command == "doctor":
+            return run_doctor()
+        if args.command == "validate-world":
+            return run_validate_world(args.world)
+    except LocalAdventureError as error:
+        print(f"Error: {error}")
+        return 2
     parser.print_help()
     return 0
 

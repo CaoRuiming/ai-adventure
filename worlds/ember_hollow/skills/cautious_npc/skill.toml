@@ -1,0 +1,9 @@
+schema_version = 1
+id = "cautious_npc"
+name = "Cautious NPC Behavior"
+description = "Guidance for guarded NPCs who reveal information gradually."
+priority = 0.6
+always_include = false
+trigger_terms = ["cautious", "guarded", "interrogate", "trust"]
+entity_ids = ["mark"]
+maximum_chars = 3000

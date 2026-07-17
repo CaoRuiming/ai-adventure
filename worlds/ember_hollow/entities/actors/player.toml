@@ -1,0 +1,13 @@
+schema_version = 1
+id = "player"
+name = "Traveler"
+location_id = "observatory"
+is_player = true
+description = "A traveler searching for a way out of Ember Hollow."
+
+[stats]
+health = 10
+resolve = 7
+
+[relationships.mark]
+trust = 0

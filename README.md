@@ -4,9 +4,9 @@ Local Adventure Engine is a local, open-source, Git-friendly interactive
 fiction engine. It is designed to keep world content, prompts, rules, and
 runtime state understandable and inspectable on the user's machine.
 
-Milestone 1 provides the repository skeleton and a small command-line entry
-point. The authored sample world and gameplay features are added in later
-milestones in the order defined by `IMPLEMENTATION_PLAN.md`.
+Milestone 2 adds a human-readable sample world and offline world validation.
+Gameplay features continue to arrive in the order defined by
+`IMPLEMENTATION_PLAN.md`.
 
 ## Privacy
 
@@ -35,11 +35,12 @@ model ID exposed by LM Studio's local server.
 ```bash
 python -m local_adventure --help
 python -m local_adventure doctor
+python -m local_adventure validate-world --world worlds/ember_hollow
 ```
 
-`doctor` is currently a Milestone 1 placeholder. World validation, sample-world
-play, session management, exports, and the remaining commands are implemented
-by later milestones.
+`doctor` is currently a Milestone 1 placeholder. The validation command loads
+TOML content and Markdown lore safely without contacting a model. Play, session
+management, and exports are implemented by later milestones.
 
 ## Development
 

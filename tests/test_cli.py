@@ -34,6 +34,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertIn("usage:", output.getvalue())
 
+    def test_validate_world_prints_authored_content_counts(self) -> None:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = cli.main(["validate-world", "--world", "worlds/ember_hollow"])
+        self.assertEqual(result, 0)
+        self.assertIn("World valid: Ember Hollow", output.getvalue())
+        self.assertIn("actors=2", output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,9 @@
+schema_version = 1
+id = "west_gate"
+name = "West Gate"
+description = "A sealed gate at the edge of the old city."
+connections = ["observatory"]
+
+[attributes]
+region = "upper_city"
+indoors = false

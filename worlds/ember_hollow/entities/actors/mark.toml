@@ -1,0 +1,13 @@
+schema_version = 1
+id = "mark"
+name = "Mark Vale"
+location_id = "observatory"
+is_player = false
+description = "A guarded cartographer who knows the old city routes."
+
+[stats]
+health = 10
+resolve = 7
+
+[relationships.player]
+trust = 0

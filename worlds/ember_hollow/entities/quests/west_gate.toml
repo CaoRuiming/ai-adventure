@@ -1,0 +1,6 @@
+schema_version = 1
+id = "west_gate"
+name = "The West Gate"
+description = "Learn what lies beyond the sealed west gate."
+initial_status = "inactive"
+allowed_statuses = ["inactive", "active", "completed", "failed"]
