@@ -84,6 +84,15 @@ class WorldRepository:
             (world_id, source_path, content_hash, title, self.clock()),
         )
 
+    def source_path(self, world_id: str) -> str:
+        """Return the authored source path for a persisted world."""
+        row = self.connection.execute(
+            "SELECT source_path FROM worlds WHERE world_id = ?", (world_id,)
+        ).fetchone()
+        if row is None:
+            raise DatabaseError(f"world '{world_id}' does not exist in the local database")
+        return str(row["source_path"])
+
 
 class SessionRepository:
     """Create, fetch, and administratively move session heads."""
@@ -112,6 +121,11 @@ class SessionRepository:
 
     def list_for_world(self, world_id: str) -> list[SessionRecord]:
         rows = self.connection.execute("SELECT * FROM sessions WHERE world_id = ? ORDER BY created_at, session_id", (world_id,)).fetchall()
+        return [_session_from_row(row) for row in rows]
+
+    def list_all(self) -> list[SessionRecord]:
+        """Return all sessions in deterministic creation order for the CLI."""
+        rows = self.connection.execute("SELECT * FROM sessions ORDER BY created_at, session_id").fetchall()
         return [_session_from_row(row) for row in rows]
 
     def cached_state(self, session_id: str) -> tuple[str | None, GameState]:

@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
 
@@ -53,7 +53,17 @@ This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
   - Added process-local last-error diagnostics and deterministic extractive
     scene summaries every 10 committed turns, capped at 12,000 characters.
   - Acceptance commands: all passed on 2026-07-16 (51 offline tests).
-- [ ] Milestone 8 — Interactive CLI
+- [x] Milestone 8 — Interactive CLI
+  - Added `sessions` and `play` commands, including durable session creation,
+    resume-by-ID, and the synchronous terminal game loop.
+  - Added in-game state, location, inventory, history, context, undo, branch,
+    checkpoint, restore, session-listing, reload, and debug commands. Reload
+    reindexes lore while preserving the authoritative session state.
+  - Added clean EOF/Ctrl-C input exits and cancellation handling that returns
+    to the prompt without committing a partial model turn.
+  - Export command shapes are visible but intentionally report that exports
+    arrive in Milestone 9, where their required formats are specified.
+  - Acceptance commands: offline checks passed on 2026-07-17 (55 tests).
 - [ ] Milestone 9 — Export, documentation, and release hardening
 
 ## Verification
@@ -94,7 +104,7 @@ Additional Milestone 1 behavior check:
 - `python -m local_adventure doctor` — PASS (placeholder diagnostic)
 
 Most recent passing test command: `python -m unittest discover -s tests -v`
-(51 tests, 2026-07-16).
+(55 tests, 2026-07-17).
 
 Milestone 4 acceptance and required repository commands, run with `.venv`
 activated:
@@ -137,3 +147,18 @@ activated:
   endpoint and configured token were unavailable and correctly reported as
   warnings.
 - `python -m local_adventure validate-world --world worlds/ember_hollow` — PASS
+
+Milestone 8 acceptance and required repository commands, run with `.venv`
+activated:
+
+- `python -m unittest discover -s tests -v` — PASS (55 tests; no live model calls)
+- `python -m compileall local_adventure tests` — PASS
+- `python -m local_adventure doctor` — PASS for local engine checks; LM Studio
+  endpoint and configured token were unavailable and correctly reported as
+  warnings.
+- `python -m local_adventure validate-world --world worlds/ember_hollow` — PASS
+- `python -m local_adventure sessions create --world worlds/ember_hollow --name
+  "Milestone 8 Verification"` — PASS
+- Manual LM Studio play acceptance was not run because no local LM Studio server
+  or configured token was available. Offline CLI tests cover the loop,
+  autosave, EOF, and model-request cancellation paths.
