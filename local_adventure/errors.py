@@ -8,5 +8,10 @@ class LocalAdventureError(Exception):
 class ConfigurationError(LocalAdventureError): pass
 class WorldValidationError(LocalAdventureError): pass
 class ContentParseError(LocalAdventureError): pass
+class DatabaseError(LocalAdventureError): pass
+class MigrationError(DatabaseError): pass
 class StateEventValidationError(LocalAdventureError): pass
 class StateInvariantError(LocalAdventureError): pass
+class SessionNotFoundError(LocalAdventureError): pass
+class CheckpointNotFoundError(LocalAdventureError): pass
+class ConcurrentSessionUpdateError(LocalAdventureError): pass

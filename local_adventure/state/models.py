@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..content.models import ID_PATTERN
+from ..util.json_tools import canonical_json
 
 JsonScalar = str | int | float | bool | None
 
@@ -76,7 +76,7 @@ class GameState(StateModel):
 
     def canonical_json(self) -> str:
         """Return stable JSON suitable for state comparisons and later storage."""
-        return json.dumps(self.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return canonical_json(self.model_dump(mode="json"))
 
 
 def build_initial_state(world: "LoadedWorld", scenario_id: str | None = None) -> GameState:
