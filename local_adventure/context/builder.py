@@ -15,7 +15,7 @@ from .budget import join_sections
 from .formatter import format_lore, format_state, format_turn, truncate_paragraphs
 
 TURN_OUTPUT_CONTRACT = """OUTPUT FORMAT
-Reply with exactly one JSON object and no Markdown or explanation. Its required shape is {\"narration\": \"...\", \"events\": [...]}. `narration` must be non-empty. Use an empty `events` list when no mechanical change occurs. Every event needs a non-empty `reason` and one of these forms, using only IDs from the supplied state:
+Reply with exactly one JSON object and no Markdown or explanation. Its required shape is {\"narration\": \"...\", \"events\": [...]}. `narration` must be non-empty. Use an empty `events` list when no mechanical change occurs; never emit an event merely to restate existing state (including moving an actor to their current location). Every event needs a non-empty `reason` and one of these forms, using only IDs from the supplied state:
 - {\"type\":\"move_actor\",\"actor_id\":\"...\",\"location_id\":\"...\",\"reason\":\"...\"}
 - {\"type\":\"transfer_item\",\"item_id\":\"...\",\"holder_type\":\"actor|location|none\",\"holder_id\":\"...\",\"reason\":\"...\"}
 - {\"type\":\"set_flag\",\"key\":\"...\",\"value\":true,\"reason\":\"...\"}

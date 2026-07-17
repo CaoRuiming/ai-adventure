@@ -62,6 +62,21 @@ class TurnServiceTests(unittest.TestCase):
         self.assertEqual([row["attempt_number"] for row in calls], [1, 2])
         self.assertIsNotNone(calls[0]["validation_errors_json"])
         self.assertIsNone(calls[1]["validation_errors_json"])
+        self.assertIn("move_actor.location_id 'missing' does not exist", backend.requests[1].messages[1].content)
+        self.assertIn("ORIGINAL INVALID RESPONSE", backend.requests[1].messages[1].content)
+
+    def test_safe_noop_events_commit_without_using_repair(self) -> None:
+        backend = ScriptedModelBackend([
+            '{"narration":"You pause at the observatory.","events":[{"type":"move_actor","actor_id":"player","location_id":"observatory","reason":"The player stays put."},{"type":"transfer_item","item_id":"brass_key","holder_type":"actor","holder_id":"mark","reason":"The key remains with Mark."}]}'
+        ])
+        service = self._turn_service(backend)
+
+        result = service.submit_turn(self.session.session_id, "I pause.")
+
+        self.assertEqual(result.turn.turn_number, 1)
+        self.assertEqual(len(backend.requests), 1)
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM state_events").fetchone()[0], 0)
+        self.assertEqual(self.game.state_for_session(self.session.session_id), self.game.replay(self.session.session_id))
 
     def test_failed_repair_leaves_head_unchanged_and_retains_last_error(self) -> None:
         backend = ScriptedModelBackend(["not json", "still not json"])

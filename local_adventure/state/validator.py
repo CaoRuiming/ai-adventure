@@ -7,7 +7,7 @@ import re
 
 from ..content.models import GameplaySettings, ID_PATTERN
 from ..errors import StateEventValidationError, StateInvariantError
-from .events import AdjustRelationshipEvent, AdjustStatEvent, Event, MoveActorEvent, SetQuestStatusEvent, TransferItemEvent
+from .events import AdjustRelationshipEvent, AdjustStatEvent, Event, MoveActorEvent, SetFlagEvent, SetQuestStatusEvent, TransferItemEvent
 from .models import GameState
 
 
@@ -25,7 +25,8 @@ def validate_event(
         _require(event.location_id in state.locations, f"move_actor.location_id '{event.location_id}' does not exist")
         _require(not (model_generated and event.allow_unconnected), "move_actor.allow_unconnected is not permitted for model events")
         current = state.actors[event.actor_id].location_id
-        _require(event.allow_unconnected or event.location_id in state.locations[current].connections, "move_actor.location_id is not connected to the actor's current location")
+        _require(event.location_id == current or event.allow_unconnected or event.location_id in state.locations[current].connections,
+            "move_actor.location_id is not connected to the actor's current location")
     elif isinstance(event, TransferItemEvent):
         _require(event.item_id in state.items, f"transfer_item.item_id '{event.item_id}' does not exist")
         if event.holder_type == "none":
@@ -53,6 +54,32 @@ def validate_event(
         _require(event.quest_id in state.quests, f"set_quest_status.quest_id '{event.quest_id}' does not exist")
         _require(event.status in state.quests[event.quest_id].allowed_statuses, "set_quest_status.status is not allowed for this quest")
     return event
+
+
+def is_noop_event(state: GameState, event: Event) -> bool:
+    """Return whether an otherwise well-formed event leaves ``state`` unchanged.
+
+    This deliberately recognizes only effects that can be checked from the
+    current authoritative state. Unknown IDs and malformed holder references
+    remain validation failures so the model receives a repair request instead
+    of silently hiding a potentially meaningful mistake.
+    """
+    if isinstance(event, MoveActorEvent):
+        return event.actor_id in state.actors and state.actors[event.actor_id].location_id == event.location_id
+    if isinstance(event, TransferItemEvent):
+        if event.item_id not in state.items:
+            return False
+        item = state.items[event.item_id]
+        return item.holder_type == event.holder_type and item.holder_id == event.holder_id
+    if isinstance(event, SetFlagEvent):
+        return event.key in state.flags and state.flags[event.key] == event.value
+    if isinstance(event, AdjustStatEvent):
+        return event.actor_id in state.actors and event.stat in state.actors[event.actor_id].stats and event.delta == 0
+    if isinstance(event, AdjustRelationshipEvent):
+        return event.source_actor_id in state.actors and event.target_actor_id in state.actors and (event.applied_delta if event.applied_delta is not None else event.delta) == 0
+    if isinstance(event, SetQuestStatusEvent):
+        return event.quest_id in state.quests and state.quests[event.quest_id].status == event.status
+    return False
 
 
 def validate_state(state: GameState, gameplay: GameplaySettings) -> None:

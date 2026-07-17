@@ -4,7 +4,7 @@
 
 **Model not found:** set `[model].name` to an exact ID from LM Studio `GET /v1/models`; `doctor --require-model --world PATH` verifies it.
 
-**Invalid model JSON:** the engine requests LM Studio text mode but explicitly requires one JSON object, then tries one repair and commits nothing if it still receives an invalid proposal. Use `/debug last-error` and keep prompts/rules clear.
+**Invalid model JSON or event:** the engine requests LM Studio text mode but explicitly requires one JSON object. It discards safe no-op events (for example, a move to an actor's current location), and otherwise makes one repair request containing the original response, validation error, and current state. It commits nothing if that repair is still invalid. Use `/debug last-error` and keep prompts/rules clear.
 
 **LM Studio grammar-complexity error:** the engine deliberately uses text mode rather than strict JSON Schema, because its nested event schema can exceed LM Studio grammar limits. The prompt requires JSON, and the application validates every JSON field and event before saving a turn.
 

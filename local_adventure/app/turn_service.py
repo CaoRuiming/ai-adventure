@@ -18,7 +18,7 @@ from ..lore.indexer import reindex_world
 from ..state.events import Event
 from ..state.models import GameState
 from ..state.reducer import apply_event
-from ..state.validator import validate_event
+from ..state.validator import is_noop_event, validate_event
 from ..storage.repositories import ModelCallRepository, SessionRepository, SummaryRepository, TurnRecord, TurnRepository
 from ..util.clocks import Clock, utc_now
 from ..util.hashing import sha256_text
@@ -118,7 +118,16 @@ class TurnService:
         candidate = state
         events: list[Event] = []
         for event in proposal.events:
+            # Small local models frequently restate an already-true change.
+            # Do not spend the one repair attempt on an event that is safe and
+            # provably unable to change authoritative state.
+            if is_noop_event(candidate, event):
+                continue
             committed = validate_event(candidate, event, self.world.config.gameplay, model_generated=True)
+            # Relationship clamping can turn a nonzero proposed delta into a
+            # no-op; omit that event as well so history reflects real changes.
+            if is_noop_event(candidate, committed):
+                continue
             candidate = apply_event(candidate, committed, self.world.config.gameplay)
             events.append(committed)
         return proposal, events, candidate

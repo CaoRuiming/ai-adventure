@@ -17,7 +17,7 @@ from local_adventure.state.events import (
 )
 from local_adventure.state.models import GameState, build_initial_state, state_projection
 from local_adventure.state.reducer import apply_event, apply_events
-from local_adventure.state.validator import validate_event, validate_state
+from local_adventure.state.validator import is_noop_event, validate_event, validate_state
 
 
 SAMPLE_WORLD = Path(__file__).parents[1] / "worlds" / "ember_hollow"
@@ -43,6 +43,11 @@ class ReducerTests(unittest.TestCase):
         updated = apply_event(self.state, event, self.settings)
         self.assertEqual(updated.actors["player"].location_id, "west_gate")
         self.assertEqual(self.state.actors["player"].location_id, "observatory")
+
+    def test_move_to_current_location_is_a_safe_noop(self) -> None:
+        event = self.valid(MoveActorEvent(type="move_actor", actor_id="player", location_id="observatory", reason="The player remains here."))
+        self.assertTrue(is_noop_event(self.state, event))
+        self.assertEqual(apply_event(self.state, event, self.settings), self.state)
 
     def test_transfer_item(self) -> None:
         event = self.valid(TransferItemEvent(type="transfer_item", item_id="brass_key", holder_type="actor", holder_id="player", reason="Mark gives it."))

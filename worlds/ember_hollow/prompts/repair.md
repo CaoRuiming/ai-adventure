@@ -1,1 +1,1 @@
-Return a corrected, complete response matching the requested schema. Do not explain the correction.
+Return a corrected, complete response matching the requested schema. Do not explain the correction. Use the validation errors and current state as authoritative: remove any event that cannot be supported by them, and use an empty event list when no state change is justified.
