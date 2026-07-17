@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import os
 import platform
+import sqlite3
 from pathlib import Path
 
 from . import __version__
 from .content.loader import load_world
-from .errors import LocalAdventureError
+from .errors import LocalAdventureError, ModelError
+from .llm.lm_studio import LMStudioBackend
+from .paths import runtime_root
 from .lore.indexer import reindex_world
 from .paths import database_path
 from .storage.connection import open_connection
@@ -27,10 +31,12 @@ def build_parser() -> argparse.ArgumentParser:
         version=f"local-adventure {__version__}",
     )
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
-    subparsers.add_parser(
+    doctor_parser = subparsers.add_parser(
         "doctor",
-        help="run the Milestone 1 environment diagnostic placeholder",
+        help="check the local engine and LM Studio configuration",
     )
+    doctor_parser.add_argument("--world", type=Path, help="world whose model configuration to check")
+    doctor_parser.add_argument("--require-model", action="store_true", help="treat model availability as required")
     validate_parser = subparsers.add_parser(
         "validate-world",
         help="load and validate an authored world",
@@ -41,15 +47,76 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_doctor() -> int:
-    """Print the Milestone 1 diagnostic placeholder."""
-    version = platform.python_version()
+def run_doctor(world_path: Path | None = None, require_model: bool = False) -> int:
+    """Check local prerequisites, with model problems reported independently."""
     print("Local Adventure Doctor")
     print()
-    print(f"[PASS] Python {version}")
-    print("[INFO] Full environment checks will be added in a later milestone.")
+    hard_failure = False
+    model_failure = False
+    print(f"[PASS] Python {platform.python_version()}")
+    try:
+        root = runtime_root()
+        root.mkdir(parents=True, exist_ok=True)
+        probe = root / ".write-probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        print(f"[PASS] Runtime directory writable: {root}")
+    except OSError as error:
+        hard_failure = True
+        print(f"[FAIL] Runtime directory is not writable: {error}")
+    print(f"[PASS] SQLite {sqlite3.sqlite_version}")
+    try:
+        connection = open_connection(database_path())
+        try:
+            version = apply_migrations(connection)
+            fts = connection.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'lore_documents_fts'").fetchone()
+        finally:
+            connection.close()
+        print("[PASS] SQLite FTS5 available" if fts else "[WARN] SQLite FTS5 unavailable; fallback lore search will be used")
+        print(f"[PASS] Database schema at version {version}")
+    except LocalAdventureError as error:
+        hard_failure = True
+        print(f"[FAIL] Database initialization: {error}")
+    selected_path = world_path or Path("worlds/ember_hollow")
+    world = None
+    try:
+        world = load_world(selected_path)
+        label = "Sample world" if world_path is None else "World"
+        print(f"[PASS] {label} valid: {world.config.title}")
+        for warning in world.warnings:
+            print(f"[WARN] {warning}")
+    except LocalAdventureError as error:
+        hard_failure = True
+        print(f"[FAIL] World validation: {error}")
+    if world is not None:
+        token = os.environ.get(world.config.model.api_token_env) if world.config.model.api_token_env else None
+        if world.config.model.api_token_env:
+            if token:
+                print(f"[PASS] Configured token environment variable is present: {world.config.model.api_token_env}")
+            else:
+                model_failure = True
+                print(f"[WARN] Configured token environment variable is absent: {world.config.model.api_token_env}")
+        backend = LMStudioBackend(world.config.model.base_url)
+        try:
+            model_available = backend.model_is_available(world.config.model.name, world.config.model.timeout_seconds, token)
+            print(f"[PASS] LM Studio reachable: {world.config.model.base_url}")
+            if model_available:
+                print(f"[PASS] Configured model visible: {world.config.model.name}")
+            else:
+                model_failure = True
+                print(f"[WARN] Configured model is not visible: {world.config.model.name}")
+        except ModelError:
+            model_failure = True
+            print(f"[WARN] LM Studio is not reachable at {world.config.model.base_url}")
+            print("       Start the LM Studio local server before playing, or update world.toml.")
     print()
-    print("Result: Milestone 1 repository skeleton is available.")
+    if hard_failure or (require_model and model_failure):
+        print("Result: local engine checks failed." if hard_failure else "Result: configured model is required but unavailable.")
+        return 1
+    if model_failure:
+        print("Result: usable for authoring and tests; model play unavailable.")
+    else:
+        print("Result: local engine and configured model are available.")
     return 0
 
 
@@ -95,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "doctor":
-            return run_doctor()
+            return run_doctor(args.world, args.require_model)
         if args.command == "validate-world":
             return run_validate_world(args.world)
         if args.command == "reindex":

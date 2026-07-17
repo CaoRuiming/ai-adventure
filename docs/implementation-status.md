@@ -34,7 +34,16 @@ This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
   - Added `reindex --world PATH`; sessions now automatically synchronize lore
     during creation.
   - Acceptance commands: all passed on 2026-07-16.
-- [ ] Milestone 6 — LM Studio backend and structured proposals
+- [x] Milestone 6 — LM Studio backend and structured proposals
+  - Added provider-neutral model request/response models, strict structured
+    `TurnProposal` validation, the LM Studio Chat Completions and model-list
+    adapter, response-size limits, typed transport errors, and an offline
+    scripted backend.
+  - Added privacy-conscious model-call audit persistence and expanded `doctor`
+    with local runtime, SQLite, migration, world, authentication-variable, and
+    optional-model diagnostics. LM Studio remains a warning unless
+    `--require-model` is supplied.
+  - Acceptance commands: all passed on 2026-07-16 (47 offline tests).
 - [ ] Milestone 7 — Complete turn service and repair path
 - [ ] Milestone 8 — Interactive CLI
 - [ ] Milestone 9 — Export, documentation, and release hardening
@@ -98,3 +107,14 @@ activated:
 - `python -m compileall local_adventure tests` — PASS
 - `python -m local_adventure doctor` — PASS (Milestone 1 placeholder)
 - `python -m local_adventure reindex --world worlds/ember_hollow` — PASS (FTS5)
+
+Milestone 6 acceptance and required repository commands, run with `.venv`
+activated:
+
+- `python -m pip install -r requirements.txt` — PASS (Pydantic already installed)
+- `python -m unittest discover -s tests -v` — PASS (47 tests; no live model calls)
+- `python -m compileall local_adventure tests` — PASS
+- `python -m local_adventure doctor` — PASS for local engine checks; LM Studio
+  endpoint and configured token were unavailable and correctly reported as
+  warnings.
+- `python -m local_adventure validate-world --world worlds/ember_hollow` — PASS

@@ -49,6 +49,28 @@ class CheckpointRecord:
     created_at: str
 
 
+@dataclass(frozen=True)
+class ModelCallRecord:
+    """Auditable metadata for one model attempt, excluding credentials."""
+
+    model_call_id: str
+    session_id: str
+    parent_turn_id: str | None
+    attempt_number: int
+    backend: str
+    model_name: str
+    request_json: str | None
+    request_hash: str
+    response_json: str | None
+    response_hash: str | None
+    parsed_response_json: str | None
+    validation_errors_json: str | None
+    prompt_eval_count: int | None
+    eval_count: int | None
+    duration_ms: int | None
+    created_at: str
+
+
 class WorldRepository:
     """Persist loaded-world identity data without owning content loading."""
 
@@ -195,7 +217,58 @@ class CheckpointRepository:
 
 
 class ModelCallRepository:
-    """Reserved model-call audit repository; model integration is Milestone 6."""
+    """Persist privacy-conscious, append-only model-call audit metadata."""
+
+    def __init__(self, connection: sqlite3.Connection, clock: Clock = utc_now) -> None:
+        self.connection, self.clock = connection, clock
+
+    def create(
+        self,
+        model_call_id: str,
+        session_id: str,
+        parent_turn_id: str | None,
+        attempt_number: int,
+        backend: str,
+        model_name: str,
+        request_hash: str,
+        *,
+        request_json: str | None = None,
+    ) -> ModelCallRecord:
+        """Record a request before it is sent, never accepting secret tokens."""
+        self.connection.execute(
+            "INSERT INTO model_calls (model_call_id, session_id, parent_turn_id, attempt_number, backend, model_name, request_json, request_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (model_call_id, session_id, parent_turn_id, attempt_number, backend, model_name,
+             request_json, request_hash, self.clock()),
+        )
+        return self.get(model_call_id)
+
+    def complete(
+        self,
+        model_call_id: str,
+        *,
+        response_json: str | None,
+        response_hash: str | None,
+        parsed_response_json: str | None = None,
+        validation_errors_json: str | None = None,
+        prompt_eval_count: int | None = None,
+        eval_count: int | None = None,
+        duration_ms: int | None = None,
+    ) -> ModelCallRecord:
+        """Attach response metadata once the attempt has completed or failed."""
+        cursor = self.connection.execute(
+            "UPDATE model_calls SET response_json = ?, response_hash = ?, parsed_response_json = ?, validation_errors_json = ?, prompt_eval_count = ?, eval_count = ?, duration_ms = ? WHERE model_call_id = ?",
+            (response_json, response_hash, parsed_response_json, validation_errors_json,
+             prompt_eval_count, eval_count, duration_ms, model_call_id),
+        )
+        if cursor.rowcount != 1:
+            raise DatabaseError(f"model call '{model_call_id}' does not exist")
+        return self.get(model_call_id)
+
+    def get(self, model_call_id: str) -> ModelCallRecord:
+        row = self.connection.execute("SELECT * FROM model_calls WHERE model_call_id = ?", (model_call_id,)).fetchone()
+        if row is None:
+            raise DatabaseError(f"model call '{model_call_id}' does not exist")
+        return ModelCallRecord(**dict(row))
 
 
 class LoreRepository:

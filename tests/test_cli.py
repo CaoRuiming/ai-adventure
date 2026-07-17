@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import unittest
+from unittest.mock import patch
 
 from local_adventure import cli
 
@@ -19,13 +20,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, 0)
         self.assertIn("doctor", output.getvalue())
 
-    def test_doctor_is_offline_placeholder(self) -> None:
+    @patch("local_adventure.cli.LMStudioBackend.model_is_available", return_value=False)
+    def test_doctor_reports_local_checks_when_model_is_unavailable(self, _model_available: object) -> None:
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             result = cli.main(["doctor"])
         self.assertEqual(result, 0)
         self.assertIn("Local Adventure Doctor", output.getvalue())
-        self.assertIn("Milestone 1", output.getvalue())
+        self.assertIn("SQLite", output.getvalue())
+        self.assertIn("model play unavailable", output.getvalue())
 
     def test_no_command_prints_help_without_creating_runtime_files(self) -> None:
         output = io.StringIO()

@@ -12,6 +12,7 @@ from local_adventure.errors import ConcurrentSessionUpdateError, MigrationError
 from local_adventure.state.events import SetFlagEvent
 from local_adventure.storage.connection import open_connection
 from local_adventure.storage.migrations import apply_migrations
+from local_adventure.storage.repositories import ModelCallRepository
 
 SAMPLE_WORLD = Path(__file__).parents[1] / "worlds" / "ember_hollow"
 
@@ -64,6 +65,20 @@ class DatabaseTests(unittest.TestCase):
         with self.assertRaises(ConcurrentSessionUpdateError):
             service.turns.commit(session.session_id, None, "stale", "two", "two", [], state)
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM turns").fetchone()[0], 1)
+
+    def test_model_call_audit_can_omit_sensitive_request_content(self) -> None:
+        service = _service(self.connection)
+        session, _ = service.create_session("Audit Test")
+        audits = ModelCallRepository(self.connection, clock=lambda: "2026-07-16T00:00:00.000000Z")
+        audits.create("call_1", session.session_id, None, 1, "lm_studio", "local-model", "request-hash")
+        record = audits.complete(
+            "call_1", response_json='{"choices":[]}', response_hash="response-hash",
+            parsed_response_json='{"events":[],"narration":"Hello."}', validation_errors_json=None,
+            prompt_eval_count=12, eval_count=4, duration_ms=25,
+        )
+        self.assertIsNone(record.request_json)
+        self.assertEqual(record.response_hash, "response-hash")
+        self.assertEqual(record.prompt_eval_count, 12)
 
 
 def _service(connection):

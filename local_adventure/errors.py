@@ -16,3 +16,14 @@ class SessionNotFoundError(LocalAdventureError): pass
 class CheckpointNotFoundError(LocalAdventureError): pass
 class ConcurrentSessionUpdateError(LocalAdventureError): pass
 class ContextBudgetError(LocalAdventureError): pass
+class LoreIndexError(LocalAdventureError): pass
+class ProposalValidationError(LocalAdventureError): pass
+
+
+class ModelError(LocalAdventureError):
+    """Base class for failures communicating with the configured model."""
+
+
+class ModelConnectionError(ModelError): pass
+class ModelTimeoutError(ModelError): pass
+class ModelProtocolError(ModelError): pass
