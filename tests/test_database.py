@@ -27,9 +27,10 @@ class DatabaseTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_migrations_are_idempotent_and_connection_is_configured(self) -> None:
-        self.assertEqual(apply_migrations(self.connection), 1)
+        self.assertEqual(apply_migrations(self.connection), 2)
         self.assertEqual(self.connection.execute("PRAGMA foreign_keys").fetchone()[0], 1)
         self.assertEqual(self.connection.execute("PRAGMA journal_mode").fetchone()[0], "wal")
+        self.assertIsNotNone(self.connection.execute("SELECT name FROM sqlite_master WHERE name = 'lore_documents'").fetchone())
 
     def test_missing_applied_migration_is_detected(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -47,6 +48,7 @@ class DatabaseTests(unittest.TestCase):
     def test_session_creation_and_atomic_turn_commit(self) -> None:
         service = _service(self.connection)
         session, _ = service.create_session("Database Test")
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM lore_documents").fetchone()[0], 3)
         event = SetFlagEvent(type="set_flag", key="asked_mark", value=True, reason="The player asks.")
         turn = service.commit_turn(session.session_id, "I ask Mark.", "Mark listens.", [event])
         self.assertEqual(turn.turn_number, 1)

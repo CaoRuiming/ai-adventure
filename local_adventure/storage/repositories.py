@@ -12,6 +12,9 @@ from ..state.models import GameState
 from ..util.clocks import Clock, utc_now
 from ..util.json_tools import canonical_json
 
+if False:  # pragma: no cover - imports only for static type checkers
+    from ..lore.models import IndexedLoreDocument, StoredLoreDocument
+
 
 @dataclass(frozen=True)
 class SessionRecord:
@@ -196,11 +199,87 @@ class ModelCallRepository:
 
 
 class LoreRepository:
-    """Reserved lore repository; lore indexing begins in Milestone 5."""
+    """Persist and query lore documents; retrieval policy belongs in ``lore``."""
+
+    def __init__(self, connection: sqlite3.Connection, clock: Clock = utc_now) -> None:
+        self.connection, self.clock = connection, clock
+
+    def fts_available(self) -> bool:
+        row = self.connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'lore_documents_fts'"
+        ).fetchone()
+        return row is not None
+
+    def existing_hashes(self, world_id: str) -> dict[str, str]:
+        rows = self.connection.execute(
+            "SELECT relative_path, content_hash FROM lore_documents WHERE world_id = ?", (world_id,)
+        ).fetchall()
+        return {row["relative_path"]: row["content_hash"] for row in rows}
+
+    def upsert(self, document: "IndexedLoreDocument") -> None:
+        metadata_json = canonical_json(document.metadata)
+        previous = self.connection.execute(
+            "SELECT document_id FROM lore_documents WHERE world_id = ? AND relative_path = ?",
+            (document.world_id, document.relative_path),
+        ).fetchone()
+        if self.fts_available() and previous is not None:
+            self.connection.execute(
+                "DELETE FROM lore_documents_fts WHERE world_id = ? AND document_id = ?",
+                (document.world_id, previous["document_id"]),
+            )
+        self.connection.execute(
+            "INSERT INTO lore_documents (document_id, world_id, relative_path, title, kind, metadata_json, body, content_hash, modified_ns, indexed_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(world_id, relative_path) DO UPDATE SET document_id=excluded.document_id, title=excluded.title, kind=excluded.kind, metadata_json=excluded.metadata_json, body=excluded.body, content_hash=excluded.content_hash, modified_ns=excluded.modified_ns, indexed_at=excluded.indexed_at",
+            (document.document_id, document.world_id, document.relative_path, document.title, document.kind,
+             metadata_json, document.body, document.content_hash, document.modified_ns, self.clock()),
+        )
+        if self.fts_available():
+            self.connection.execute("DELETE FROM lore_documents_fts WHERE world_id = ? AND document_id = ?", (document.world_id, document.document_id))
+            self.connection.execute(
+                "INSERT INTO lore_documents_fts (document_id, world_id, title, aliases, tags, body) VALUES (?, ?, ?, ?, ?, ?)",
+                (document.document_id, document.world_id, document.title, " ".join(document.metadata.get("aliases", [])),
+                 " ".join(document.metadata.get("tags", [])), document.body),
+            )
+
+    def remove_missing(self, world_id: str, relative_paths: set[str]) -> int:
+        rows = self.connection.execute("SELECT document_id, relative_path FROM lore_documents WHERE world_id = ?", (world_id,)).fetchall()
+        missing = [row for row in rows if row["relative_path"] not in relative_paths]
+        for row in missing:
+            if self.fts_available():
+                self.connection.execute("DELETE FROM lore_documents_fts WHERE world_id = ? AND document_id = ?", (world_id, row["document_id"]))
+            self.connection.execute("DELETE FROM lore_documents WHERE document_id = ?", (row["document_id"],))
+        return len(missing)
+
+    def documents(self, world_id: str) -> list["StoredLoreDocument"]:
+        rows = self.connection.execute("SELECT * FROM lore_documents WHERE world_id = ? ORDER BY document_id", (world_id,)).fetchall()
+        return [_lore_from_row(row) for row in rows]
+
+    def fts_candidates(self, world_id: str, query: str) -> dict[str, float]:
+        if not self.fts_available() or not query:
+            return {}
+        try:
+            rows = self.connection.execute(
+                "SELECT document_id, bm25(lore_documents_fts) AS rank FROM lore_documents_fts WHERE world_id = ? AND lore_documents_fts MATCH ? LIMIT 30",
+                (world_id, query),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return {}
+        # bm25 ranks are negative, with a lower value being more relevant.
+        return {row["document_id"]: -float(row["rank"]) for row in rows}
 
 
 class SummaryRepository:
     """Reserved summary repository; summaries are not implemented yet."""
+
+
+def _lore_from_row(row: sqlite3.Row) -> "StoredLoreDocument":
+    from ..lore.models import StoredLoreDocument
+    return StoredLoreDocument(
+        document_id=row["document_id"], world_id=row["world_id"], relative_path=row["relative_path"],
+        title=row["title"], kind=row["kind"], metadata=json.loads(row["metadata_json"]), body=row["body"],
+        content_hash=row["content_hash"], modified_ns=row["modified_ns"],
+    )
 
 
 def _session_from_row(row: sqlite3.Row) -> SessionRecord:

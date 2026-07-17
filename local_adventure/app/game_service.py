@@ -8,6 +8,7 @@ from collections.abc import Callable
 
 from ..content.models import LoadedWorld
 from ..errors import DatabaseError
+from ..lore.indexer import reindex_world
 from ..state.events import Event
 from ..state.models import GameState, build_initial_state
 from ..state.reducer import apply_events
@@ -42,6 +43,7 @@ class GameService:
         try:
             with self.connection:
                 self.worlds.upsert(self.world.config.id, self.world.root, content_hash, self.world.config.title)
+                reindex_world(self.connection, self.world)
                 session = self.sessions.create(self._id_factory(), clean_name, state)
             return session, self.world.scenarios[state.scenario_id].opening_narration
         except sqlite3.Error as error:

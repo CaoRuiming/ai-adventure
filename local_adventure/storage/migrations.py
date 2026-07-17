@@ -73,7 +73,13 @@ def _execute_script(connection: sqlite3.Connection, script: str) -> None:
         statement += line
         if sqlite3.complete_statement(statement):
             if statement.strip():
-                connection.execute(statement)
+                try:
+                    connection.execute(statement)
+                except sqlite3.OperationalError as error:
+                    # FTS5 is optional.  Keep the regular lore table migration
+                    # usable on SQLite builds compiled without it.
+                    if "CREATE VIRTUAL TABLE lore_documents_fts" not in statement or "fts5" not in str(error).lower():
+                        raise
             statement = ""
     if statement.strip():
         raise MigrationError("migration ends with an incomplete SQL statement")

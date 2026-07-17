@@ -15,3 +15,4 @@ class StateInvariantError(LocalAdventureError): pass
 class SessionNotFoundError(LocalAdventureError): pass
 class CheckpointNotFoundError(LocalAdventureError): pass
 class ConcurrentSessionUpdateError(LocalAdventureError): pass
+class ContextBudgetError(LocalAdventureError): pass

@@ -36,11 +36,14 @@ model ID exposed by LM Studio's local server.
 python -m local_adventure --help
 python -m local_adventure doctor
 python -m local_adventure validate-world --world worlds/ember_hollow
+python -m local_adventure reindex --world worlds/ember_hollow
 ```
 
 `doctor` is currently a Milestone 1 placeholder. The validation command loads
-TOML content and Markdown lore safely without contacting a model. Play, session
-management, and exports are implemented by later milestones.
+TOML content and Markdown lore safely without contacting a model. `reindex`
+updates the local SQLite lore index at `.local-adventure/local-adventure.sqlite3`;
+it uses SQLite FTS5 when available and a deterministic local fallback otherwise.
+Play, session management, and exports are implemented by later milestones.
 
 ## Development
 

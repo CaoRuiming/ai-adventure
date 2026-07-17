@@ -26,7 +26,14 @@ This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
     replay-backed state-cache recovery, non-destructive undo, shared-history
     branching, and named checkpoints.
   - Acceptance commands: all passed on 2026-07-16.
-- [ ] Milestone 5 — Lore indexing and deterministic context
+- [x] Milestone 5 — Lore indexing and deterministic context
+  - Added the lore schema migration with optional FTS5 support, incremental and
+    safe Markdown indexing, deterministic FTS/fallback retrieval, prompt-skill
+    selection, two-message context assembly, exact character budgets, and
+    context diagnostics.
+  - Added `reindex --world PATH`; sessions now automatically synchronize lore
+    during creation.
+  - Acceptance commands: all passed on 2026-07-16.
 - [ ] Milestone 6 — LM Studio backend and structured proposals
 - [ ] Milestone 7 — Complete turn service and repair path
 - [ ] Milestone 8 — Interactive CLI
@@ -70,7 +77,7 @@ Additional Milestone 1 behavior check:
 - `python -m local_adventure doctor` — PASS (placeholder diagnostic)
 
 Most recent passing test command: `python -m unittest discover -s tests -v`
-(35 tests, 2026-07-16).
+(39 tests, 2026-07-16).
 
 Milestone 4 acceptance and required repository commands, run with `.venv`
 activated:
@@ -82,3 +89,12 @@ activated:
 
 Focused commits were not created because the environment does not permit
 writing `.git/index.lock`.
+
+Milestone 5 acceptance and required repository commands, run with `.venv`
+activated:
+
+- `python -m pip install -r requirements.txt` — PASS (Pydantic already installed)
+- `python -m unittest discover -s tests -v` — PASS (39 tests)
+- `python -m compileall local_adventure tests` — PASS
+- `python -m local_adventure doctor` — PASS (Milestone 1 placeholder)
+- `python -m local_adventure reindex --world worlds/ember_hollow` — PASS (FTS5)
