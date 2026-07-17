@@ -1,0 +1,1 @@
+"""Authored world content package."""
