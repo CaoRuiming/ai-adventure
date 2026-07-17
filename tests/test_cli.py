@@ -18,6 +18,15 @@ from local_adventure.storage.repositories import SessionRepository
 
 
 class CliTests(unittest.TestCase):
+    @patch("local_adventure.cli.importlib.import_module")
+    def test_line_editing_loads_readline_when_available(self, import_module: object) -> None:
+        cli._enable_line_editing()
+        import_module.assert_called_once_with("readline")
+
+    @patch("local_adventure.cli.importlib.import_module", side_effect=ImportError)
+    def test_line_editing_is_optional_when_readline_is_unavailable(self, _import_module: object) -> None:
+        cli._enable_line_editing()
+
     def test_parser_help_contains_doctor(self) -> None:
         parser = cli.build_parser()
         output = io.StringIO()
@@ -96,6 +105,22 @@ class CliTests(unittest.TestCase):
                 self.assertIsNotNone(SessionRepository(connection).list_all()[0].head_turn_id)
             finally:
                 connection.close()
+
+    @patch("local_adventure.cli.LMStudioBackend.generate")
+    def test_play_separates_user_prompt_from_surrounding_output(self, generate: object) -> None:
+        generate.return_value = ModelResponse(
+            content='{"narration":"Mark nods.","events":[]}', raw_response={"choices": []}
+        )
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"LOCAL_ADVENTURE_HOME": temporary}):
+            replies = iter(["I greet Mark.", "/quit"])
+            output = io.StringIO()
+
+            def read_input(prompt: str) -> str:
+                output.write(prompt)
+                return next(replies)
+
+            self.assertEqual(cli.play_game(world_path=Path("worlds/ember_hollow"), input_fn=read_input, output=output), 0)
+            self.assertIn("\n> \n", output.getvalue())
 
     @patch("local_adventure.cli.LMStudioBackend.generate", side_effect=KeyboardInterrupt)
     def test_play_cancellation_does_not_commit_a_turn(self, _generate: object) -> None:

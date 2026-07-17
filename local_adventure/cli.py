@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import os
 import platform
 import shlex
@@ -28,6 +29,14 @@ from .paths import database_path
 from .storage.connection import open_connection
 from .storage.migrations import apply_migrations
 from .storage.repositories import SessionRepository, TurnRepository, WorldRepository
+
+
+def _enable_line_editing() -> None:
+    """Load terminal line editing when the platform provides it."""
+    try:
+        importlib.import_module("readline")
+    except ImportError:
+        pass
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -257,6 +266,7 @@ def play_game(
     name: str = "First Journey", input_fn: Callable[[str], str] = input, output: TextIO | None = None,
 ) -> int:
     """Run one synchronous terminal session; all state changes stay in app services."""
+    _enable_line_editing()
     output = output or sys.stdout
     connection = _connection()
     try:
@@ -280,11 +290,13 @@ def play_game(
         print("Type /help for commands.\n", file=output)
         print(_wrap(opening, output), file=output)
         while True:
+            print("", file=output)
             try:
                 line = input_fn("> ")
             except (EOFError, KeyboardInterrupt):
                 print("", file=output)
                 return 0
+            print("", file=output)
             if line.startswith("/"):
                 command = line.strip()
                 if command == "/quit":
