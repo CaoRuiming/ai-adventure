@@ -8,3 +8,5 @@ class LocalAdventureError(Exception):
 class ConfigurationError(LocalAdventureError): pass
 class WorldValidationError(LocalAdventureError): pass
 class ContentParseError(LocalAdventureError): pass
+class StateEventValidationError(LocalAdventureError): pass
+class StateInvariantError(LocalAdventureError): pass
