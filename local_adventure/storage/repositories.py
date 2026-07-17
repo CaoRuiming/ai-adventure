@@ -162,7 +162,8 @@ class TurnRepository:
 
     def commit(
         self, session_id: str, expected_parent_id: str | None, turn_id: str, player_input: str,
-        narration: str, events: list[Event], state: GameState,
+        narration: str, events: list[Event], state: GameState, *, model_call_id: str | None = None,
+        model_call_completion: dict[str, object] | None = None,
     ) -> TurnRecord:
         """Atomically append a turn if the session head is unchanged."""
         try:
@@ -175,8 +176,8 @@ class TurnRepository:
             number = 1 if expected_parent_id is None else self.get(expected_parent_id).turn_number + 1
             now = self.clock()
             self.connection.execute(
-                "INSERT INTO turns (turn_id, session_id, parent_turn_id, turn_number, player_input, narration, status, model_call_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 'committed', NULL, ?)",
-                (turn_id, session_id, expected_parent_id, number, player_input, narration, now),
+                "INSERT INTO turns (turn_id, session_id, parent_turn_id, turn_number, player_input, narration, status, model_call_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 'committed', ?, ?)",
+                (turn_id, session_id, expected_parent_id, number, player_input, narration, model_call_id, now),
             )
             for sequence, event in enumerate(events):
                 self.connection.execute(
@@ -185,6 +186,16 @@ class TurnRepository:
                 )
             self.connection.execute("UPDATE state_cache SET head_turn_id = ?, state_json = ?, updated_at = ? WHERE session_id = ?", (turn_id, state.canonical_json(), now, session_id))
             self.connection.execute("UPDATE sessions SET head_turn_id = ?, updated_at = ? WHERE session_id = ?", (turn_id, now, session_id))
+            if model_call_id is not None and model_call_completion is not None:
+                cursor = self.connection.execute(
+                    "UPDATE model_calls SET response_json = ?, response_hash = ?, parsed_response_json = ?, validation_errors_json = ?, prompt_eval_count = ?, eval_count = ?, duration_ms = ? WHERE model_call_id = ?",
+                    (model_call_completion["response_json"], model_call_completion["response_hash"],
+                     model_call_completion["parsed_response_json"], model_call_completion["validation_errors_json"],
+                     model_call_completion["prompt_eval_count"], model_call_completion["eval_count"],
+                     model_call_completion["duration_ms"], model_call_id),
+                )
+                if cursor.rowcount != 1:
+                    raise DatabaseError(f"model call '{model_call_id}' does not exist")
             self.connection.commit()
             return self.get(turn_id)
         except (DatabaseError, SessionNotFoundError, ConcurrentSessionUpdateError):
@@ -343,7 +354,23 @@ class LoreRepository:
 
 
 class SummaryRepository:
-    """Reserved summary repository; summaries are not implemented yet."""
+    """Persist deterministic, non-authoritative extractive summaries."""
+
+    def __init__(self, connection: sqlite3.Connection, clock: Clock = utc_now) -> None:
+        self.connection, self.clock = connection, clock
+
+    def create(self, summary_id: str, session_id: str, through_turn_id: str, content: str) -> None:
+        self.connection.execute(
+            "INSERT INTO summaries (summary_id, session_id, through_turn_id, kind, content, created_at) VALUES (?, ?, ?, 'scene', ?, ?)",
+            (summary_id, session_id, through_turn_id, content, self.clock()),
+        )
+
+    def latest(self, session_id: str) -> str:
+        row = self.connection.execute(
+            "SELECT content FROM summaries WHERE session_id = ? ORDER BY created_at DESC, summary_id DESC LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        return "" if row is None else str(row["content"])
 
 
 def _lore_from_row(row: sqlite3.Row) -> "StoredLoreDocument":

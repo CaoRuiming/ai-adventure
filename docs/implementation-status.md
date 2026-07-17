@@ -44,7 +44,15 @@ This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
     optional-model diagnostics. LM Studio remains a warning unless
     `--require-model` is supplied.
   - Acceptance commands: all passed on 2026-07-16 (47 offline tests).
-- [ ] Milestone 7 — Complete turn service and repair path
+- [x] Milestone 7 — Complete turn service and repair path
+  - Added a complete `TurnService`: input and session/world checks, automatic
+    lore synchronization, deterministic context/request creation, semantic
+    event validation, one repair attempt, and commit-after-validation behavior.
+  - Successful model-call audit completion is recorded in the same transaction
+    as the turn, ordered events, state cache, and session-head update.
+  - Added process-local last-error diagnostics and deterministic extractive
+    scene summaries every 10 committed turns, capped at 12,000 characters.
+  - Acceptance commands: all passed on 2026-07-16 (51 offline tests).
 - [ ] Milestone 8 — Interactive CLI
 - [ ] Milestone 9 — Export, documentation, and release hardening
 
@@ -86,7 +94,7 @@ Additional Milestone 1 behavior check:
 - `python -m local_adventure doctor` — PASS (placeholder diagnostic)
 
 Most recent passing test command: `python -m unittest discover -s tests -v`
-(39 tests, 2026-07-16).
+(51 tests, 2026-07-16).
 
 Milestone 4 acceptance and required repository commands, run with `.venv`
 activated:
@@ -113,6 +121,17 @@ activated:
 
 - `python -m pip install -r requirements.txt` — PASS (Pydantic already installed)
 - `python -m unittest discover -s tests -v` — PASS (47 tests; no live model calls)
+- `python -m compileall local_adventure tests` — PASS
+- `python -m local_adventure doctor` — PASS for local engine checks; LM Studio
+  endpoint and configured token were unavailable and correctly reported as
+  warnings.
+- `python -m local_adventure validate-world --world worlds/ember_hollow` — PASS
+
+Milestone 7 acceptance and required repository commands, run with `.venv`
+activated:
+
+- `python -m pip install -r requirements.txt` — PASS (Pydantic already installed)
+- `python -m unittest discover -s tests -v` — PASS (51 tests; no live model calls)
 - `python -m compileall local_adventure tests` — PASS
 - `python -m local_adventure doctor` — PASS for local engine checks; LM Studio
   endpoint and configured token were unavailable and correctly reported as
