@@ -76,6 +76,25 @@ class TurnService:
         )
         request = self._request(context, self.world.config.model.temperature)
         first_id, first_response = self._generate(session_id, session.head_turn_id, 1, request)
+        if first_response.finish_reason == "length":
+            errors = ["model response ended because LM Studio reached its completion limit"]
+            self._complete_failure(first_id, first_response, errors)
+            if self.world.config.gameplay.maximum_repair_attempts == 0:
+                return self._raise_failed_repair(errors)
+            compact_context = ContextBuilder(self.connection, self.world).build_truncation_retry(state, action)
+            retry_request = self._request(compact_context, 0.2)
+            retry_id, retry_response = self._generate(session_id, session.head_turn_id, 2, retry_request)
+            if retry_response.finish_reason == "length":
+                retry_errors = ["model response ended because LM Studio reached its completion limit"]
+                self._complete_failure(retry_id, retry_response, retry_errors)
+                return self._raise_failed_repair(retry_errors)
+            try:
+                proposal, events, candidate = self._validate_proposal(retry_response.content, state)
+            except (ProposalValidationError, StateEventValidationError, StateInvariantError) as retry_error:
+                retry_errors = _validation_errors(retry_error)
+                self._complete_failure(retry_id, retry_response, retry_errors)
+                return self._raise_failed_repair(retry_errors)
+            return self._commit(session_id, session.head_turn_id, action, proposal, events, candidate, compact_context, retry_id, retry_response)
         try:
             proposal, events, candidate = self._validate_proposal(first_response.content, state)
         except (ProposalValidationError, StateEventValidationError, StateInvariantError) as error:

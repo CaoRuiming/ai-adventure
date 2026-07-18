@@ -39,6 +39,7 @@ class ModelResponse(BackendModel):
     prompt_eval_count: int | None = None
     eval_count: int | None = None
     duration_ms: int | None = None
+    finish_reason: str | None = None
 
 
 class ModelBackend(Protocol):

@@ -92,6 +92,31 @@ class ContextBuilder:
             [(match.document.relative_path, match.score) for match in included_lore], [skill.config.id for skill in selected_skills],
             included_turns, omitted_lore, omitted_skills, omitted_turns, request_hash, self.world.config.audit.store_prompts))
 
+    def build_truncation_retry(self, state: GameState, player_input: str) -> ContextAssembly:
+        """Build a minimal fresh context after LM Studio stops at its token limit.
+
+        Retaining only mandatory instructions, state, and the action releases
+        space used by lore, skills, summaries, and recent turns.  The partial
+        response is deliberately not included: it cannot be repaired safely.
+        """
+        config = self.world.config.context
+        system = join_sections([self.world.world_markdown, self.world.narrator_prompt, *self.world.rules, TURN_OUTPUT_CONTRACT])
+        state_text = format_state(state)
+        if len(system) > config.system_chars:
+            raise ContextBudgetError("mandatory system content exceeds system_chars")
+        if len(state_text) > config.state_chars:
+            raise ContextBudgetError("state projection exceeds state_chars")
+        constraint = "TRUNCATION RETRY\nReturn a complete JSON object with 80 to 200 words of narration."
+        user = join_sections([state_text, constraint, "PLAYER INPUT\n" + player_input])
+        if len(system) + len(user) > config.max_chars:
+            raise ContextBudgetError("mandatory system content, state, and player input exceed max_chars")
+        messages = [ChatMessage("system", system), ChatMessage("user", user)]
+        section_chars = {"system": len(system), "state": len(state_text), "skills": 0, "lore": 0,
+            "recent_turns": 0, "player_input": len(player_input)}
+        request_hash = sha256_text("\n\x00\n".join(message.role + "\n" + message.content for message in messages))
+        return ContextAssembly(messages, ContextDiagnostics(len(system) + len(user), section_chars,
+            [], [], [], 0, 0, 0, request_hash, self.world.config.audit.store_prompts))
+
     def _recent_turns(self, head_turn_id: str | None, maximum_turns: int, budget: int) -> tuple[str, list[int], int]:
         turns = self.turns.ancestry(head_turn_id)[-maximum_turns:] if head_turn_id else []
         selected: list[str] = []

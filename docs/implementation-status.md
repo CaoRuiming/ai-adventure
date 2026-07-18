@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
 
@@ -81,6 +81,11 @@ This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
   such as invented IDs still use the existing single repair request, which
   includes the original response, validation error, and authoritative state.
   - Required verification passed on 2026-07-17 (62 offline tests, compilation,
+    and `doctor`; model-runtime warnings expected when LM Studio is stopped).
+- Added a dedicated LM Studio completion-limit retry. Responses with
+  `finish_reason: "length"` are recorded as failed attempts and regenerated
+  from compact context instead of being sent through JSON repair.
+  - Required verification passed on 2026-07-18 (66 offline tests, compilation,
     and `doctor`; model-runtime warnings expected when LM Studio is stopped).
 
 ## Verification

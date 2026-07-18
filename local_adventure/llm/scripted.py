@@ -8,9 +8,9 @@ from .backend import ModelRequest, ModelResponse
 
 
 class ScriptedModelBackend:
-    """Return queued response text or raise queued exceptions in order."""
+    """Return queued responses or raise queued exceptions in order."""
 
-    def __init__(self, responses: list[str | Exception]) -> None:
+    def __init__(self, responses: list[str | ModelResponse | Exception]) -> None:
         self._responses = deque(responses)
         self.requests: list[ModelRequest] = []
 
@@ -21,4 +21,6 @@ class ScriptedModelBackend:
         response = self._responses.popleft()
         if isinstance(response, Exception):
             raise response
+        if isinstance(response, ModelResponse):
+            return response
         return ModelResponse(content=response, raw_response={"scripted": True})

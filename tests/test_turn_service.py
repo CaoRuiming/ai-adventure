@@ -10,6 +10,7 @@ from local_adventure.app.game_service import GameService
 from local_adventure.app.turn_service import TurnService
 from local_adventure.content.loader import load_world
 from local_adventure.errors import ProposalValidationError
+from local_adventure.llm.backend import ModelResponse
 from local_adventure.llm.scripted import ScriptedModelBackend
 from local_adventure.storage.connection import open_connection
 from local_adventure.storage.migrations import apply_migrations
@@ -64,6 +65,28 @@ class TurnServiceTests(unittest.TestCase):
         self.assertIsNone(calls[1]["validation_errors_json"])
         self.assertIn("move_actor.location_id 'missing' does not exist", backend.requests[1].messages[1].content)
         self.assertIn("ORIGINAL INVALID RESPONSE", backend.requests[1].messages[1].content)
+
+    def test_length_limited_response_uses_compact_fresh_retry_not_json_repair(self) -> None:
+        backend = ScriptedModelBackend([
+            ModelResponse(content='```json\n{"narration":"An unfinished response', raw_response={"choices": []}, finish_reason="length"),
+            '{"narration":"Mark considers your request.","events":[]}',
+        ])
+        service = self._turn_service(backend)
+
+        result = service.submit_turn(self.session.session_id, "I ask Mark for help.")
+
+        self.assertEqual(result.turn.turn_number, 1)
+        self.assertEqual(len(backend.requests), 2)
+        self.assertEqual(backend.requests[1].temperature, 0.2)
+        self.assertIn("TRUNCATION RETRY", backend.requests[1].messages[1].content)
+        self.assertNotIn("ORIGINAL INVALID RESPONSE", backend.requests[1].messages[1].content)
+        self.assertLess(
+            sum(len(message.content) for message in backend.requests[1].messages),
+            sum(len(message.content) for message in backend.requests[0].messages),
+        )
+        calls = self.connection.execute("SELECT attempt_number, validation_errors_json FROM model_calls ORDER BY attempt_number").fetchall()
+        self.assertEqual([row["attempt_number"] for row in calls], [1, 2])
+        self.assertIn("completion limit", calls[0]["validation_errors_json"])
 
     def test_safe_noop_events_commit_without_using_repair(self) -> None:
         backend = ScriptedModelBackend([

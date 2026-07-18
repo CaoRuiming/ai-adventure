@@ -46,7 +46,7 @@ class LMStudioBackendTests(unittest.TestCase):
 
     @patch("local_adventure.llm.lm_studio.urlopen")
     def test_completion_uses_text_mode_and_parses_content(self, mocked_open: object) -> None:
-        mocked_open.return_value = _Response(json.dumps({"choices": [{"message": {"content": '{"narration": "Hello."}'}}], "usage": {"prompt_tokens": 8, "completion_tokens": 3}}).encode())
+        mocked_open.return_value = _Response(json.dumps({"choices": [{"message": {"content": '{"narration": "Hello."}'}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 8, "completion_tokens": 3}}).encode())
         response = self.backend.generate(self.request)
         sent = mocked_open.call_args.args[0]
         self.assertEqual(sent.full_url, "http://127.0.0.1:1234/v1/chat/completions")
@@ -57,6 +57,7 @@ class LMStudioBackendTests(unittest.TestCase):
         self.assertEqual(response.content, '{"narration": "Hello."}')
         self.assertEqual(response.prompt_eval_count, 8)
         self.assertEqual(response.eval_count, 3)
+        self.assertEqual(response.finish_reason, "stop")
         self.assertNotIn("secret-token", json.dumps(self.request.audit_payload()))
 
     @patch("local_adventure.llm.lm_studio.urlopen")

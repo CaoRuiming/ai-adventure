@@ -47,6 +47,7 @@ class LMStudioBackend:
             content = message["content"]
             if not isinstance(content, str):
                 raise ValueError("choices[0].message.content must be a string")
+            finish_reason = _optional_str(choices[0].get("finish_reason"))
         except (KeyError, TypeError, ValueError) as error:
             raise ModelProtocolError(f"LM Studio response is incomplete: {error}") from error
         usage = raw.get("usage")
@@ -57,6 +58,7 @@ class LMStudioBackend:
             prompt_eval_count=_optional_int(usage.get("prompt_tokens")),
             eval_count=_optional_int(usage.get("completion_tokens")),
             duration_ms=duration_ms,
+            finish_reason=finish_reason,
         )
 
     def list_models(self, timeout_seconds: int = 10, api_token: str | None = None) -> list[str]:
@@ -143,3 +145,7 @@ def _http_error_detail(error: HTTPError, api_token: str | None) -> str:
 
 def _optional_int(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None
