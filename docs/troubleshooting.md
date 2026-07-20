@@ -4,7 +4,7 @@
 
 **Model not found:** set `[model].name` to an exact ID from LM Studio `GET /v1/models`; `doctor --require-model --world PATH` verifies it.
 
-**Invalid model JSON or event:** the engine requests LM Studio text mode but explicitly requires one JSON object. It discards safe no-op events (for example, a move to an actor's current location), and otherwise makes one repair request containing the original response, validation error, and current state. It commits nothing if that repair is still invalid. Use `/debug last-error` and keep prompts/rules clear.
+**Invalid model JSON or event:** the engine requests LM Studio text mode but explicitly requires one JSON object. It discards safe no-op events (for example, a move to an actor's current location), and otherwise makes one repair request containing the original response, validation error, and current state. It commits nothing if that repair is still invalid. For small models that frequently hallucinate item IDs or holders, opt in to `gameplay.relaxed_item_management = true` in `world.toml`; invalid model item transfers are then discarded while all other validation remains strict. Use `/debug last-error` and keep prompts/rules clear.
 
 **Response stopped at the completion limit:** when LM Studio reports `finish_reason: "length"`, the engine does not try to repair the partial JSON. It makes its one retry with only mandatory instructions, current state, and player input, and asks for 80–200 words. If that retry is also length-limited, no turn is saved. Reduce `[context]` budgets or increase the model's context window if this persists.
 

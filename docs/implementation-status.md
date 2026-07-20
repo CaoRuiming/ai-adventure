@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
 
@@ -86,6 +86,12 @@ This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
   `finish_reason: "length"` are recorded as failed attempts and regenerated
   from compact context instead of being sent through JSON repair.
   - Required verification passed on 2026-07-18 (66 offline tests, compilation,
+    and `doctor`; model-runtime warnings expected when LM Studio is stopped).
+- Added opt-in relaxed item management for smaller local models. With
+  `gameplay.relaxed_item_management = true`, invalid model-generated item
+  transfers are discarded instead of triggering a repair; strict validation is
+  still the default and invalid state is never committed.
+  - Required verification passed on 2026-07-19 (68 offline tests, compilation,
     and `doctor`; model-runtime warnings expected when LM Studio is stopped).
 
 ## Verification

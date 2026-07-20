@@ -82,6 +82,26 @@ def is_noop_event(state: GameState, event: Event) -> bool:
     return False
 
 
+def is_ignorable_item_event(state: GameState, event: Event, gameplay: GameplaySettings, *, model_generated: bool) -> bool:
+    """Return whether an invalid model item transfer may safely be discarded.
+
+    Relaxed item management is intentionally narrow: it suppresses retries for
+    malformed references in a model-generated ``transfer_item`` event, but it
+    never creates an item, changes an item holder, or weakens state invariants.
+    Non-model events remain strict so application code cannot accidentally
+    conceal a programming error.
+    """
+    if not (gameplay.relaxed_item_management and model_generated and isinstance(event, TransferItemEvent)):
+        return False
+    if event.item_id not in state.items:
+        return True
+    if event.holder_type == "none":
+        return bool(event.holder_id)
+    if event.holder_type == "actor":
+        return event.holder_id not in state.actors
+    return event.holder_id not in state.locations
+
+
 def validate_state(state: GameState, gameplay: GameplaySettings) -> None:
     """Raise StateInvariantError when a complete state violates an invariant."""
     _invariant(state.player_actor_id in state.actors, "player actor does not exist")

@@ -24,6 +24,7 @@ class ContentLoaderTests(unittest.TestCase):
     def test_loads_valid_sample_world(self) -> None:
         world = load_world(SAMPLE_WORLD)
         self.assertEqual(world.config.id, "ember_hollow")
+        self.assertFalse(world.config.gameplay.relaxed_item_management)
         self.assertEqual(len(world.actors), 2)
         self.assertEqual(len(world.lore_documents), 3)
         self.assertEqual(len(world.skills), 1)

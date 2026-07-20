@@ -27,6 +27,7 @@ maximum_skills = 4
 [gameplay]
 maximum_events_per_turn = 12
 maximum_repair_attempts = 1
+relaxed_item_management = false
 relationship_minimum = -100
 relationship_maximum = 100
 stat_delta_limit = 20

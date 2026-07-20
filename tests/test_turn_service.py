@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import shutil
 from pathlib import Path
 
 from local_adventure.app.game_service import GameService
@@ -100,6 +101,53 @@ class TurnServiceTests(unittest.TestCase):
         self.assertEqual(len(backend.requests), 1)
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM state_events").fetchone()[0], 0)
         self.assertEqual(self.game.state_for_session(self.session.session_id), self.game.replay(self.session.session_id))
+
+    def test_relaxed_item_management_discards_invalid_item_events_without_retry(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        world_path = Path(temporary.name) / "ember_hollow"
+        shutil.copytree(SAMPLE_WORLD, world_path)
+        config_path = world_path / "world.toml"
+        config_path.write_text(
+            config_path.read_text(encoding="utf-8").replace(
+                "relaxed_item_management = false", "relaxed_item_management = true"
+            ),
+            encoding="utf-8",
+        )
+        world = load_world(world_path)
+        ids = iter(f"relaxed_id_{number}" for number in range(100))
+        game = GameService(self.connection, world, clock=lambda: NOW, id_factory=lambda: next(ids))
+        session, _ = game.create_session("Relaxed items")
+        backend = ScriptedModelBackend([
+            '{"narration":"You take the key while ignoring a false lead.","events":['
+            '{"type":"transfer_item","item_id":"imaginary_key","holder_type":"actor","holder_id":"player","reason":"The model invented this item."},'
+            '{"type":"transfer_item","item_id":"brass_key","holder_type":"actor","holder_id":"imaginary_holder","reason":"The model invented this holder."},'
+            '{"type":"transfer_item","item_id":"brass_key","holder_type":"actor","holder_id":"player","reason":"Mark gives you the real key."}'
+            ']}'
+        ])
+        service = TurnService(self.connection, world, backend, clock=lambda: NOW, id_factory=lambda: next(ids))
+
+        result = service.submit_turn(session.session_id, "I ask Mark for the key.")
+
+        self.assertEqual(len(backend.requests), 1)
+        self.assertEqual(result.turn.turn_number, 1)
+        self.assertEqual(game.state_for_session(session.session_id).items["brass_key"].holder_id, "player")
+        rows = self.connection.execute("SELECT payload_json FROM state_events").fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertIn('"item_id":"brass_key"', rows[0]["payload_json"])
+
+    def test_strict_item_management_repairs_invalid_item_event_by_default(self) -> None:
+        backend = ScriptedModelBackend([
+            '{"narration":"A false lead.","events":[{"type":"transfer_item","item_id":"imaginary_key","holder_type":"actor","holder_id":"player","reason":"The model invented this item."}]}',
+            '{"narration":"Mark considers your request.","events":[]}',
+        ])
+        service = self._turn_service(backend)
+
+        result = service.submit_turn(self.session.session_id, "I ask Mark for the key.")
+
+        self.assertEqual(result.turn.turn_number, 1)
+        self.assertEqual(len(backend.requests), 2)
+        self.assertIn("transfer_item.item_id 'imaginary_key' does not exist", backend.requests[1].messages[1].content)
 
     def test_failed_repair_leaves_head_unchanged_and_retains_last_error(self) -> None:
         backend = ScriptedModelBackend(["not json", "still not json"])

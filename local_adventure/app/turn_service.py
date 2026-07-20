@@ -18,7 +18,7 @@ from ..lore.indexer import reindex_world
 from ..state.events import Event
 from ..state.models import GameState
 from ..state.reducer import apply_event
-from ..state.validator import is_noop_event, validate_event
+from ..state.validator import is_ignorable_item_event, is_noop_event, validate_event
 from ..storage.repositories import ModelCallRepository, SessionRepository, SummaryRepository, TurnRecord, TurnRepository
 from ..util.clocks import Clock, utc_now
 from ..util.hashing import sha256_text
@@ -137,6 +137,11 @@ class TurnService:
         candidate = state
         events: list[Event] = []
         for event in proposal.events:
+            # Optional resilience for small models: discard nonsensical item
+            # references rather than retrying an otherwise usable proposal.
+            # This never changes state for an invented item or holder.
+            if is_ignorable_item_event(candidate, event, self.world.config.gameplay, model_generated=True):
+                continue
             # Small local models frequently restate an already-true change.
             # Do not spend the one repair attempt on an event that is safe and
             # provably unable to change authoritative state.
