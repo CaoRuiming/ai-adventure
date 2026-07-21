@@ -99,6 +99,11 @@ This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
   still the default and the authored quest vocabulary remains authoritative.
   - Required verification passed on 2026-07-20 (70 offline tests, compilation,
     and `doctor`; model-runtime warnings expected when LM Studio is stopped).
+- Added an interactive-terminal notification bell immediately before each
+  player action prompt, so users receive their terminal's configured audio cue
+  when a long model response has completed. Redirected output remains silent.
+  - Required verification passed on 2026-07-20 (72 offline tests, compilation,
+    and `doctor`; model-runtime warnings expected when LM Studio is stopped).
 
 ## Verification
 

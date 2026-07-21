@@ -27,6 +27,29 @@ class CliTests(unittest.TestCase):
     def test_line_editing_is_optional_when_readline_is_unavailable(self, _import_module: object) -> None:
         cli._enable_line_editing()
 
+    def test_prompt_notification_uses_terminal_bell_only_for_interactive_output(self) -> None:
+        interactive_output = unittest.mock.Mock()
+        interactive_output.isatty.return_value = True
+        cli._notify_prompt_ready(interactive_output)
+        interactive_output.write.assert_called_once_with("\a")
+        interactive_output.flush.assert_called_once_with()
+
+        redirected_output = io.StringIO()
+        cli._notify_prompt_ready(redirected_output)
+        self.assertEqual(redirected_output.getvalue(), "")
+
+    @patch("local_adventure.cli._notify_prompt_ready")
+    def test_play_notifies_immediately_before_each_action_prompt(self, notify: object) -> None:
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"LOCAL_ADVENTURE_HOME": temporary}):
+            replies = iter(["/quit"])
+
+            def read_input(_prompt: str) -> str:
+                self.assertTrue(notify.called)
+                return next(replies)
+
+            self.assertEqual(cli.play_game(world_path=Path("worlds/ember_hollow"), input_fn=read_input, output=io.StringIO()), 0)
+            notify.assert_called_once()
+
     def test_parser_help_contains_doctor(self) -> None:
         parser = cli.build_parser()
         output = io.StringIO()

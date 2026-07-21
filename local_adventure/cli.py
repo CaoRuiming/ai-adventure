@@ -39,6 +39,13 @@ def _enable_line_editing() -> None:
         pass
 
 
+def _notify_prompt_ready(output: TextIO) -> None:
+    """Emit the terminal's configured notification bell before player input."""
+    if output.isatty():
+        output.write("\a")
+        output.flush()
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level parser without performing any I/O."""
     parser = argparse.ArgumentParser(
@@ -292,6 +299,7 @@ def play_game(
         while True:
             print("", file=output)
             try:
+                _notify_prompt_ready(output)
                 line = input_fn("> ")
             except (EOFError, KeyboardInterrupt):
                 print("", file=output)

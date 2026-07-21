@@ -2,6 +2,8 @@
 
 **Connection refused:** start LM Studio's local server (Developer tab or `lms server start`), then run `doctor --world PATH`. Confirm `base_url` is reachable.
 
+**No prompt notification sound:** the game emits the standard terminal bell only when its output is an interactive terminal. Check that terminal notification bells are enabled; redirected output deliberately remains silent.
+
 **Model not found:** set `[model].name` to an exact ID from LM Studio `GET /v1/models`; `doctor --require-model --world PATH` verifies it.
 
 **Invalid model JSON or event:** the engine requests LM Studio text mode but explicitly requires one JSON object. It discards safe no-op events (for example, a move to an actor's current location), and otherwise makes one repair request containing the original response, validation error, and current state. It commits nothing if that repair is still invalid. For small models that frequently hallucinate item IDs or holders, opt in to `gameplay.relaxed_item_management = true` in `world.toml`; invalid model item transfers are then discarded while all other validation remains strict. For hallucinated quest IDs or statuses, use `gameplay.relaxed_quest_management = true`; invalid model quest updates are discarded while all other validation remains strict. Use `/debug last-error` and keep prompts/rules clear.
