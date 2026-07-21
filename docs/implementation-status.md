@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
 
@@ -92,6 +92,12 @@ This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
   transfers are discarded instead of triggering a repair; strict validation is
   still the default and invalid state is never committed.
   - Required verification passed on 2026-07-19 (68 offline tests, compilation,
+    and `doctor`; model-runtime warnings expected when LM Studio is stopped).
+- Added opt-in relaxed quest management for smaller local models. With
+  `gameplay.relaxed_quest_management = true`, invalid model-generated quest
+  updates are discarded instead of triggering a repair; strict validation is
+  still the default and the authored quest vocabulary remains authoritative.
+  - Required verification passed on 2026-07-20 (70 offline tests, compilation,
     and `doctor`; model-runtime warnings expected when LM Studio is stopped).
 
 ## Verification

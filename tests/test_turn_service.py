@@ -149,6 +149,53 @@ class TurnServiceTests(unittest.TestCase):
         self.assertEqual(len(backend.requests), 2)
         self.assertIn("transfer_item.item_id 'imaginary_key' does not exist", backend.requests[1].messages[1].content)
 
+    def test_relaxed_quest_management_discards_invalid_quest_events_without_retry(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        world_path = Path(temporary.name) / "ember_hollow"
+        shutil.copytree(SAMPLE_WORLD, world_path)
+        config_path = world_path / "world.toml"
+        config_path.write_text(
+            config_path.read_text(encoding="utf-8").replace(
+                "relaxed_quest_management = false", "relaxed_quest_management = true"
+            ),
+            encoding="utf-8",
+        )
+        world = load_world(world_path)
+        ids = iter(f"relaxed_quest_id_{number}" for number in range(100))
+        game = GameService(self.connection, world, clock=lambda: NOW, id_factory=lambda: next(ids))
+        session, _ = game.create_session("Relaxed quests")
+        backend = ScriptedModelBackend([
+            '{"narration":"The gate is now your goal.","events":['
+            '{"type":"set_quest_status","quest_id":"imaginary_quest","status":"active","reason":"The model invented this quest."},'
+            '{"type":"set_quest_status","quest_id":"west_gate","status":"resolved","reason":"The model invented this status."},'
+            '{"type":"set_quest_status","quest_id":"west_gate","status":"active","reason":"You commit to opening the gate."}'
+            ']}'
+        ])
+        service = TurnService(self.connection, world, backend, clock=lambda: NOW, id_factory=lambda: next(ids))
+
+        result = service.submit_turn(session.session_id, "I decide to open the gate.")
+
+        self.assertEqual(len(backend.requests), 1)
+        self.assertEqual(result.turn.turn_number, 1)
+        self.assertEqual(game.state_for_session(session.session_id).quests["west_gate"].status, "active")
+        rows = self.connection.execute("SELECT payload_json FROM state_events").fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertIn('"status":"active"', rows[0]["payload_json"])
+
+    def test_strict_quest_management_repairs_invalid_quest_event_by_default(self) -> None:
+        backend = ScriptedModelBackend([
+            '{"narration":"A false objective.","events":[{"type":"set_quest_status","quest_id":"imaginary_quest","status":"active","reason":"The model invented this quest."}]}',
+            '{"narration":"Mark considers your request.","events":[]}',
+        ])
+        service = self._turn_service(backend)
+
+        result = service.submit_turn(self.session.session_id, "I ask Mark about the gate.")
+
+        self.assertEqual(result.turn.turn_number, 1)
+        self.assertEqual(len(backend.requests), 2)
+        self.assertIn("set_quest_status.quest_id 'imaginary_quest' does not exist", backend.requests[1].messages[1].content)
+
     def test_failed_repair_leaves_head_unchanged_and_retains_last_error(self) -> None:
         backend = ScriptedModelBackend(["not json", "still not json"])
         service = self._turn_service(backend)

@@ -102,6 +102,19 @@ def is_ignorable_item_event(state: GameState, event: Event, gameplay: GameplaySe
     return event.holder_id not in state.locations
 
 
+def is_ignorable_quest_event(state: GameState, event: Event, gameplay: GameplaySettings, *, model_generated: bool) -> bool:
+    """Return whether an invalid model quest update may safely be discarded.
+
+    Relaxed quest management suppresses retries for invented quest IDs and
+    statuses outside a quest's authored vocabulary. It never creates a quest,
+    expands allowed statuses, or weakens state invariants. Non-model events
+    remain strict so application code cannot conceal a programming error.
+    """
+    if not (gameplay.relaxed_quest_management and model_generated and isinstance(event, SetQuestStatusEvent)):
+        return False
+    return event.quest_id not in state.quests or event.status not in state.quests[event.quest_id].allowed_statuses
+
+
 def validate_state(state: GameState, gameplay: GameplaySettings) -> None:
     """Raise StateInvariantError when a complete state violates an invariant."""
     _invariant(state.player_actor_id in state.actors, "player actor does not exist")

@@ -55,6 +55,7 @@ class GameplaySettings(AuthoredModel):
     maximum_events_per_turn: int = Field(ge=0, le=50)
     maximum_repair_attempts: int = Field(ge=0, le=1)
     relaxed_item_management: bool = False
+    relaxed_quest_management: bool = False
     relationship_minimum: int
     relationship_maximum: int
     stat_delta_limit: int = Field(gt=0)
