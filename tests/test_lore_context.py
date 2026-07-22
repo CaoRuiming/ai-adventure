@@ -56,6 +56,8 @@ class LoreAndContextTests(unittest.TestCase):
         self.assertEqual([message.role for message in assembled.messages], ["system", "user"])
         self.assertLessEqual(assembled.diagnostics.total_chars, self.world.config.context.max_chars)
         self.assertIn('Reply with exactly one JSON object', assembled.messages[0].content)
+        self.assertIn("Treat the player's input as an attempted action, not prose to rewrite", assembled.messages[0].content)
+        self.assertIn("let NPCs and the environment take initiative", assembled.messages[0].content)
         self.assertIn("cautious_npc", assembled.diagnostics.skill_ids)
         self.assertTrue(assembled.diagnostics.lore)
 
