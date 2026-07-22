@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated: 2026-07-20
+Last updated: 2026-07-22
 
 This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
 
@@ -75,6 +75,14 @@ This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
   - Acceptance commands: all passed on 2026-07-17 (59 offline tests).
 
 ## Post-milestone robustness update
+
+- Added `/continue`, a single-turn autoplay command. It supplies the model
+  with an explicit scene-continuation instruction, permits validated events
+  arising from entity interactions, preserves player agency, and records the
+  resulting committed turn as `/continue` in history and exports.
+  - Required verification passed on 2026-07-21 (74 offline tests,
+    compilation, and `doctor`; model-runtime warnings expected when LM Studio
+    is stopped).
 
 - Added safe no-op handling for model events that demonstrably leave state
   unchanged, including moves to an actor's current location. Unsafe events

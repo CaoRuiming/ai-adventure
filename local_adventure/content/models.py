@@ -36,6 +36,7 @@ class ContextSettings(AuthoredModel):
     max_chars: int = Field(gt=0)
     system_chars: int = Field(gt=0)
     state_chars: int = Field(gt=0)
+    previous_beat_chars: int = Field(gt=0)
     recent_turns_chars: int = Field(gt=0)
     lore_chars: int = Field(gt=0)
     skills_chars: int = Field(gt=0)
@@ -45,7 +46,8 @@ class ContextSettings(AuthoredModel):
 
     @model_validator(mode="after")
     def validate_section_total(self) -> "ContextSettings":
-        sections = self.system_chars + self.state_chars + self.recent_turns_chars + self.lore_chars + self.skills_chars
+        sections = (self.system_chars + self.state_chars + self.previous_beat_chars
+                    + self.recent_turns_chars + self.lore_chars + self.skills_chars)
         if sections > self.max_chars:
             raise ValueError("section budgets must not exceed max_chars")
         return self

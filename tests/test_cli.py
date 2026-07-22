@@ -130,6 +130,29 @@ class CliTests(unittest.TestCase):
                 connection.close()
 
     @patch("local_adventure.cli.LMStudioBackend.generate")
+    def test_play_continue_generates_and_autosaves_one_model_directed_turn(self, generate: object) -> None:
+        generate.return_value = ModelResponse(
+            content='{"narration":"Mark listens to the wind.","events":[]}', raw_response={"choices": []}
+        )
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"LOCAL_ADVENTURE_HOME": temporary}):
+            output = io.StringIO()
+            replies = iter(["/continue", "/history 1", "/quit"])
+
+            self.assertEqual(cli.play_game(world_path=Path("worlds/ember_hollow"), input_fn=lambda _prompt: next(replies), output=output), 0)
+
+            self.assertIn("Mark listens to the wind.", output.getvalue())
+            self.assertIn("PLAYER:\n/continue", output.getvalue())
+            self.assertIn("/continue", cli._HELP)
+            connection = open_connection(Path(temporary) / "local-adventure.sqlite3")
+            try:
+                apply_migrations(connection)
+                session = SessionRepository(connection).list_all()[0]
+                turn = connection.execute("SELECT turn_number, player_input FROM turns WHERE session_id = ?", (session.session_id,)).fetchone()
+                self.assertEqual((turn["turn_number"], turn["player_input"]), (1, "/continue"))
+            finally:
+                connection.close()
+
+    @patch("local_adventure.cli.LMStudioBackend.generate")
     def test_play_separates_user_prompt_from_surrounding_output(self, generate: object) -> None:
         generate.return_value = ModelResponse(
             content='{"narration":"Mark nods.","events":[]}', raw_response={"choices": []}

@@ -26,6 +26,20 @@ def format_turn(turn: TurnRecord, events: list[Event], maximum_chars: int) -> st
     return header + truncate_paragraphs(turn.narration, max(0, maximum_chars - len(header) - len(event_lines))) + event_lines
 
 
+def format_previous_beat(turn: TurnRecord, events: list[Event], maximum_chars: int) -> str:
+    """Render the latest turn as a continuity anchor for autoplay.
+
+    Unlike rolling history, this preserves the complete validated event payload
+    so a continuation can follow both prose and the mechanical consequence.
+    """
+    header = f"IMMEDIATE PREVIOUS BEAT\nTURN {turn.turn_number}\nPLAYER:\n{turn.player_input}\n\nNARRATOR:\n"
+    event_lines = "\n\nVALIDATED STATE EVENTS:\n" + "\n".join(
+        "- " + json.dumps(event.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        for event in events
+    )
+    return header + truncate_paragraphs(turn.narration, max(0, maximum_chars - len(header) - len(event_lines))) + event_lines
+
+
 def truncate_paragraphs(text: str, maximum_chars: int) -> str:
     """Trim at paragraph boundaries; use a final character slice only when needed."""
     if len(text) <= maximum_chars:

@@ -47,6 +47,47 @@ class TurnServiceTests(unittest.TestCase):
         row = self.connection.execute("SELECT model_call_id FROM turns WHERE turn_id = ?", (result.turn.turn_id,)).fetchone()
         self.assertIsNotNone(row["model_call_id"])
 
+    def test_continue_turn_prompts_for_an_autoplay_scene_beat_and_commits_it(self) -> None:
+        backend = ScriptedModelBackend([
+            '{"narration":"Mark studies the rain-dark path and grows more trusting.","events":['
+            '{"type":"adjust_relationship","source_actor_id":"mark","target_actor_id":"player",'
+            '"dimension":"trust","delta":1,"reason":"Mark is reassured by the quiet moment."}]}'
+        ])
+        service = self._turn_service(backend)
+
+        result = service.continue_turn(self.session.session_id)
+
+        self.assertEqual(result.turn.turn_number, 1)
+        self.assertEqual(result.turn.player_input, "/continue")
+        self.assertEqual(self.game.state_for_session(self.session.session_id).actors["mark"].relationships["player"]["trust"], 1)
+        prompt = backend.requests[0].messages[1].content
+        self.assertIn("AUTOPLAY CONTINUATION", prompt)
+        self.assertIn("without waiting for player input", prompt)
+        self.assertIn("Do not\nchoose actions", prompt)
+        self.assertIn("Treat the IMMEDIATE PREVIOUS BEAT", prompt)
+
+    def test_continue_includes_the_prior_beat_and_full_validated_events(self) -> None:
+        backend = ScriptedModelBackend([
+            '{"narration":"Mark offers the brass key, then waits for your answer.","events":['
+            '{"type":"transfer_item","item_id":"brass_key","holder_type":"actor","holder_id":"player","reason":"Mark entrusts the key to you."}]}',
+            '{"narration":"Rain taps the key as Mark watches your choice.","events":[]}',
+        ])
+        service = self._turn_service(backend)
+
+        service.submit_turn(self.session.session_id, "I ask Mark for the key.")
+        result = service.continue_turn(self.session.session_id)
+
+        prompt = backend.requests[1].messages[1].content
+        self.assertIn("IMMEDIATE PREVIOUS BEAT\nTURN 1", prompt)
+        self.assertIn("Mark offers the brass key, then waits for your answer.", prompt)
+        self.assertIn('"holder_id":"player"', prompt)
+        self.assertIn('"reason":"Mark entrusts the key to you."', prompt)
+        self.assertLess(prompt.index("IMMEDIATE PREVIOUS BEAT"), prompt.index("PLAYER INPUT\nAUTOPLAY CONTINUATION"))
+        self.assertEqual(result.context.diagnostics.section_chars["previous_beat"], len(
+            prompt[prompt.index("IMMEDIATE PREVIOUS BEAT"):prompt.index("PLAYER INPUT\nAUTOPLAY CONTINUATION")].rstrip()
+        ))
+        self.assertEqual(result.context.diagnostics.turn_numbers, [1])
+
     def test_invalid_first_output_and_valid_repair_create_one_committed_turn(self) -> None:
         backend = ScriptedModelBackend([
             '{"narration":"Bad move.","events":[{"type":"move_actor","actor_id":"player","location_id":"missing","reason":"Bad destination."}]}',
@@ -88,6 +129,24 @@ class TurnServiceTests(unittest.TestCase):
         calls = self.connection.execute("SELECT attempt_number, validation_errors_json FROM model_calls ORDER BY attempt_number").fetchall()
         self.assertEqual([row["attempt_number"] for row in calls], [1, 2])
         self.assertIn("completion limit", calls[0]["validation_errors_json"])
+
+    def test_continue_length_retry_retains_immediate_previous_beat(self) -> None:
+        backend = ScriptedModelBackend([
+            '{"narration":"Mark points to a fresh trail beyond the observatory.","events":[]}',
+            ModelResponse(content='{"narration":"An unfinished response', raw_response={"choices": []}, finish_reason="length"),
+            '{"narration":"Mark waits beside the trail for your response.","events":[]}',
+        ])
+        service = self._turn_service(backend)
+
+        service.submit_turn(self.session.session_id, "I ask Mark where the trail leads.")
+        result = service.continue_turn(self.session.session_id)
+
+        retry_prompt = backend.requests[2].messages[1].content
+        self.assertIn("TRUNCATION RETRY", retry_prompt)
+        self.assertIn("IMMEDIATE PREVIOUS BEAT\nTURN 1", retry_prompt)
+        self.assertIn("Mark points to a fresh trail beyond the observatory.", retry_prompt)
+        self.assertIn("VALIDATED STATE EVENTS:", retry_prompt)
+        self.assertEqual(result.context.diagnostics.turn_numbers, [1])
 
     def test_safe_noop_events_commit_without_using_repair(self) -> None:
         backend = ScriptedModelBackend([

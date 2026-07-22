@@ -311,6 +311,19 @@ def play_game(
                     return 0
                 if command == "/help":
                     print(_HELP, file=output)
+                elif command == "/continue":
+                    try:
+                        result = turn_service.continue_turn(session.session_id)
+                    except KeyboardInterrupt:
+                        print("Model request cancelled; no turn was saved.", file=output)
+                        continue
+                    except LocalAdventureError as error:
+                        print(f"Error: {error}", file=output)
+                        if debug:
+                            print("No state changes were committed for this action.", file=output)
+                        continue
+                    last_context = result.context
+                    print(_wrap(result.narration, output), file=output)
                 elif command == "/state":
                     print(format_state(game.state_for_session(session.session_id)), file=output)
                 elif command == "/where":
@@ -431,7 +444,7 @@ def _print_history(command: str, turns: TurnRepository, session_id: str, output:
 
 
 _HELP = """Commands:
-/help  /quit  /state  /where  /inventory  /history [N]
+/help  /quit  /continue  /state  /where  /inventory  /history [N]
 /context  /context full  /undo  /branch NAME  /checkpoint NAME  /restore NAME
 /sessions  /reload  /debug on|off|last-error
 /export markdown PATH  /export json PATH"""

@@ -80,7 +80,8 @@ api_token_env = "LM_STUDIO_API_TOKEN" # optional; empty string means no token
 max_chars = 60000
 system_chars = 12000
 state_chars = 12000
-recent_turns_chars = 18000
+previous_beat_chars = 4000
+recent_turns_chars = 14000
 lore_chars = 12000
 skills_chars = 4000
 maximum_recent_turns = 12
@@ -103,7 +104,7 @@ store_raw_model_responses = true
 log_level = "INFO"
 ```
 
-`model.backend` must be `"lm_studio"`; `base_url` must begin with `http://` or `https://`. A non-loopback URL produces a warning because world content and prompts will be sent there. The five section character budgets may not exceed `max_chars`. They are character counts, not token counts. Leave headroom: `WORLD.md`, narrator prompt, rules, the output contract, current-state projection, and the player input must fit as well.
+`model.backend` must be `"lm_studio"`; `base_url` must begin with `http://` or `https://`. A non-loopback URL produces a warning because world content and prompts will be sent there. The six section character budgets may not exceed `max_chars`. They are character counts, not token counts. Leave headroom: `WORLD.md`, narrator prompt, rules, the output contract, current-state projection, and the player input must fit as well. `previous_beat_chars` reserves context for the immediately preceding turn when `/continue` is used; it includes the prior narration and complete validated event payload, while `recent_turns_chars` holds older transcript history.
 
 Keep `maximum_repair_attempts` at `0` or `1`; the present schema permits no higher value. `relationship_minimum` must be below `relationship_maximum`. Set `relaxed_item_management = true` only when a smaller model frequently invents item IDs or invalid item holders. In that mode, invalid model-generated `transfer_item` events are discarded and the rest of the turn may commit; the engine never creates an item, records an invalid holder, or relaxes validation for application-generated events. Set `relaxed_quest_management = true` only when a smaller model frequently invents quest IDs or unrecognized quest statuses. It discards those invalid model-generated `set_quest_status` events; it never creates quests, adds statuses to a quest's vocabulary, or relaxes application-generated validation. Both options default to `false`, so normal worlds still repair invalid events. Audit settings control local storage only; use `store_prompts = false` if retaining full prompts is not appropriate.
 

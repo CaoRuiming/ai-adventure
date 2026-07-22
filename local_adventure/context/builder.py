@@ -12,7 +12,7 @@ from ..state.models import GameState
 from ..storage.repositories import TurnRepository
 from ..util.hashing import sha256_text
 from .budget import join_sections
-from .formatter import format_lore, format_state, format_turn, truncate_paragraphs
+from .formatter import format_lore, format_previous_beat, format_state, format_turn, truncate_paragraphs
 
 TURN_OUTPUT_CONTRACT = """OUTPUT FORMAT
 Reply with exactly one JSON object and no Markdown or explanation. Its required shape is {\"narration\": \"...\", \"events\": [...]}. `narration` must be non-empty. Use an empty `events` list when no mechanical change occurs; never emit an event merely to restate existing state (including moving an actor to their current location). Every event needs a non-empty `reason` and one of these forms, using only IDs from the supplied state:
@@ -56,7 +56,7 @@ class ContextBuilder:
     def __init__(self, connection: sqlite3.Connection, world: LoadedWorld) -> None:
         self.connection, self.world, self.turns = connection, world, TurnRepository(connection)
 
-    def build(self, state: GameState, player_input: str, head_turn_id: str | None = None, summary: str = "") -> ContextAssembly:
+    def build(self, state: GameState, player_input: str, head_turn_id: str | None = None, summary: str = "", *, include_previous_beat: bool = False) -> ContextAssembly:
         if len(player_input) > 16_000:
             raise ValueError("player input exceeds the 16,000 character limit")
         config = self.world.config.context
@@ -74,30 +74,35 @@ class ContextBuilder:
         skill_text = join_sections(_format_skill(skill) for skill in selected_skills)
         lore_matches = retrieve_lore(self.connection, state, player_input, config.maximum_lore_documents)
         lore_text, included_lore, omitted_lore = _format_lore(lore_matches, config.lore_chars)
-        recent_text, included_turns, omitted_turns = self._recent_turns(head_turn_id, config.maximum_recent_turns, config.recent_turns_chars)
+        previous_beat, previous_turn_number = self._previous_beat(head_turn_id, config.previous_beat_chars) if include_previous_beat else ("", None)
+        recent_text, included_turns, omitted_turns = self._recent_turns(
+            head_turn_id, config.maximum_recent_turns - int(include_previous_beat), config.recent_turns_chars,
+            exclude_head=include_previous_beat,
+        )
         user_sections = [state_text, skill_text, lore_text]
         if summary:
             user_sections.append("SUMMARY\n" + summary)
         if omitted_turns:
             user_sections.append("[Older history omitted due to context budget.]")
-        user_sections.extend([recent_text, "PLAYER INPUT\n" + player_input])
+        user_sections.extend([recent_text, previous_beat, "PLAYER INPUT\n" + player_input])
         user = join_sections(user_sections)
         # Section caps alone leave room for input, but summaries can consume it.
         if len(system) + len(user) > config.max_chars:
             raise ContextBudgetError("assembled context exceeds max_chars")
         messages = [ChatMessage("system", system), ChatMessage("user", user)]
-        section_chars = {"system": len(system), "state": len(state_text), "skills": len(skill_text), "lore": len(lore_text), "recent_turns": len(recent_text), "player_input": len(player_input)}
+        section_chars = {"system": len(system), "state": len(state_text), "skills": len(skill_text), "lore": len(lore_text), "previous_beat": len(previous_beat), "recent_turns": len(recent_text), "player_input": len(player_input)}
         request_hash = sha256_text("\n\x00\n".join(message.role + "\n" + message.content for message in messages))
         return ContextAssembly(messages, ContextDiagnostics(len(system) + len(user), section_chars,
             [(match.document.relative_path, match.score) for match in included_lore], [skill.config.id for skill in selected_skills],
-            included_turns, omitted_lore, omitted_skills, omitted_turns, request_hash, self.world.config.audit.store_prompts))
+            included_turns + ([previous_turn_number] if previous_turn_number is not None else []), omitted_lore, omitted_skills, omitted_turns, request_hash, self.world.config.audit.store_prompts))
 
-    def build_truncation_retry(self, state: GameState, player_input: str) -> ContextAssembly:
+    def build_truncation_retry(self, state: GameState, player_input: str, head_turn_id: str | None = None, *, include_previous_beat: bool = False) -> ContextAssembly:
         """Build a minimal fresh context after LM Studio stops at its token limit.
 
-        Retaining only mandatory instructions, state, and the action releases
-        space used by lore, skills, summaries, and recent turns.  The partial
-        response is deliberately not included: it cannot be repaired safely.
+        Retaining only mandatory instructions, state, the latest beat for an
+        autoplay continuation, and the action releases space used by lore,
+        skills, summaries, and older recent turns. The partial response is
+        deliberately not included: it cannot be repaired safely.
         """
         config = self.world.config.context
         system = join_sections([self.world.world_markdown, self.world.narrator_prompt, *self.world.rules, TURN_OUTPUT_CONTRACT])
@@ -107,18 +112,28 @@ class ContextBuilder:
         if len(state_text) > config.state_chars:
             raise ContextBudgetError("state projection exceeds state_chars")
         constraint = "TRUNCATION RETRY\nReturn a complete JSON object with 80 to 200 words of narration."
-        user = join_sections([state_text, constraint, "PLAYER INPUT\n" + player_input])
+        previous_beat, previous_turn_number = self._previous_beat(head_turn_id, config.previous_beat_chars) if include_previous_beat else ("", None)
+        user = join_sections([state_text, constraint, previous_beat, "PLAYER INPUT\n" + player_input])
         if len(system) + len(user) > config.max_chars:
             raise ContextBudgetError("mandatory system content, state, and player input exceed max_chars")
         messages = [ChatMessage("system", system), ChatMessage("user", user)]
-        section_chars = {"system": len(system), "state": len(state_text), "skills": 0, "lore": 0,
+        section_chars = {"system": len(system), "state": len(state_text), "skills": 0, "lore": 0, "previous_beat": len(previous_beat),
             "recent_turns": 0, "player_input": len(player_input)}
         request_hash = sha256_text("\n\x00\n".join(message.role + "\n" + message.content for message in messages))
         return ContextAssembly(messages, ContextDiagnostics(len(system) + len(user), section_chars,
-            [], [], [], 0, 0, 0, request_hash, self.world.config.audit.store_prompts))
+            [], [], [previous_turn_number] if previous_turn_number is not None else [], 0, 0, 0, request_hash, self.world.config.audit.store_prompts))
 
-    def _recent_turns(self, head_turn_id: str | None, maximum_turns: int, budget: int) -> tuple[str, list[int], int]:
-        turns = self.turns.ancestry(head_turn_id)[-maximum_turns:] if head_turn_id else []
+    def _previous_beat(self, head_turn_id: str | None, budget: int) -> tuple[str, int | None]:
+        if head_turn_id is None:
+            return "", None
+        turn = self.turns.get(head_turn_id)
+        return format_previous_beat(turn, self.turns.events_for_turn(turn.turn_id), budget), turn.turn_number
+
+    def _recent_turns(self, head_turn_id: str | None, maximum_turns: int, budget: int, *, exclude_head: bool = False) -> tuple[str, list[int], int]:
+        ancestry = self.turns.ancestry(head_turn_id) if head_turn_id else []
+        if exclude_head:
+            ancestry = ancestry[:-1]
+        turns = ancestry[-maximum_turns:] if maximum_turns else []
         selected: list[str] = []
         numbers: list[int] = []
         for turn in reversed(turns):

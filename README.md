@@ -22,7 +22,7 @@ python -m local_adventure validate-world --world worlds/ember_hollow
 python -m local_adventure play --world worlds/ember_hollow --name "First Journey"
 ```
 
-Useful commands include `sessions list`, `sessions create`, `reindex`, `play --session`, and `export --session ID --format markdown|json --output PATH`. In play, type `/help` for state inspection, undo, branches, checkpoints, reload, context diagnostics, and `/export markdown PATH` or `/export json PATH`. When a player action prompt is ready, an interactive terminal receives its configured notification bell; mute terminal bells in your terminal settings if you prefer silence.
+Useful commands include `sessions list`, `sessions create`, `reindex`, `play --session`, and `export --session ID --format markdown|json --output PATH`. In play, type `/help` for state inspection, undo, branches, checkpoints, reload, context diagnostics, and `/export markdown PATH` or `/export json PATH`. `/continue` advances one model-directed scene beat without choosing an action for the player character. When a player action prompt is ready, an interactive terminal receives its configured notification bell; mute terminal bells in your terminal settings if you prefer silence.
 
 Runtime data is under `.local-adventure/` by default (or `LOCAL_ADVENTURE_HOME`): the SQLite database, exports you choose to place there, and logs. Back up that directory to retain sessions.
 
@@ -53,6 +53,7 @@ python -m local_adventure play --session SESSION_ID
 Inside play, these commands manage the current session:
 
 ```text
+/continue           Advance from the prior narrated beat without player input.
 /history [N]        Show up to the last N turns on the current timeline.
 /undo               Move back one turn without deleting later history.
 /branch NAME        Create and switch to a new session at the current turn.

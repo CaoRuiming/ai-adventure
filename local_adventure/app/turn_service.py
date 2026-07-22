@@ -27,6 +27,22 @@ from .game_service import GameService
 
 IdFactory = Callable[[], str]
 
+# This is persisted as the turn input so transcript and export readers can
+# distinguish an engine-directed continuation from a player-authored action.
+CONTINUE_ACTION = "/continue"
+CONTINUE_INSTRUCTION = """AUTOPLAY CONTINUATION
+Continue the current scene for one turn without waiting for player input. Advance
+the narration through plausible actions, reactions, and interactions among the
+entities in the current scene. You may propose authoritative events only when
+they result from that narration and are supported by the supplied state. Do not
+choose actions, dialogue, or intentions for the player character; leave the
+player able to respond on the next turn.
+
+Treat the IMMEDIATE PREVIOUS BEAT as the scene's current moment. Begin as a
+direct consequence of it and continue any unresolved action, dialogue, danger,
+or question before introducing a new development. Do not reset the scene or
+change subject without a narrated bridge."""
+
 
 @dataclass(frozen=True)
 class LastTurnError:
@@ -66,13 +82,23 @@ class TurnService:
             raise ValueError("player input must not be empty")
         if len(action) > 16_000:
             raise ValueError("player input exceeds the 16,000 character limit")
+        return self._submit_turn(session_id, action, action)
+
+    def continue_turn(self, session_id: str) -> TurnResult:
+        """Advance one model-directed scene beat without a player-authored action."""
+        return self._submit_turn(session_id, CONTINUE_ACTION, CONTINUE_INSTRUCTION)
+
+    def _submit_turn(self, session_id: str, action: str, context_input: str) -> TurnResult:
+        """Commit a turn with distinct persisted and model-facing instructions."""
         session = self.sessions.get(session_id)
         if session.world_id != self.world.config.id:
             raise ValueError("selected world ID does not match the session world")
         reindex_world(self.connection, self.world)
         state = self.game.state_for_session(session_id)
+        is_continuation = action == CONTINUE_ACTION
         context = ContextBuilder(self.connection, self.world).build(
-            state, action, session.head_turn_id, self.summaries.latest(session_id)
+            state, context_input, session.head_turn_id, self.summaries.latest(session_id),
+            include_previous_beat=is_continuation,
         )
         request = self._request(context, self.world.config.model.temperature)
         first_id, first_response = self._generate(session_id, session.head_turn_id, 1, request)
@@ -81,7 +107,9 @@ class TurnService:
             self._complete_failure(first_id, first_response, errors)
             if self.world.config.gameplay.maximum_repair_attempts == 0:
                 return self._raise_failed_repair(errors)
-            compact_context = ContextBuilder(self.connection, self.world).build_truncation_retry(state, action)
+            compact_context = ContextBuilder(self.connection, self.world).build_truncation_retry(
+                state, context_input, session.head_turn_id, include_previous_beat=is_continuation,
+            )
             retry_request = self._request(compact_context, 0.2)
             retry_id, retry_response = self._generate(session_id, session.head_turn_id, 2, retry_request)
             if retry_response.finish_reason == "length":
@@ -102,7 +130,7 @@ class TurnService:
             self._complete_failure(first_id, first_response, errors)
             if self.world.config.gameplay.maximum_repair_attempts == 0:
                 return self._raise_failed_repair(errors)
-            repair_request = self._repair_request(state, action, first_response.content, errors)
+            repair_request = self._repair_request(state, context_input, first_response.content, errors)
             repair_id, repair_response = self._generate(session_id, session.head_turn_id, 2, repair_request)
             try:
                 proposal, events, candidate = self._validate_proposal(repair_response.content, state)
