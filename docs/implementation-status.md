@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated: 2026-07-22
+Last updated: 2026-09-26
 
 This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
 
@@ -76,6 +76,14 @@ This checklist tracks the milestone sequence in `IMPLEMENTATION_PLAN.md`.
 
 ## Post-milestone robustness update
 
+- Added `play --actions-file PATH` for visible, line-by-line scripted player
+  actions, followed by ordinary interactive play. Ctrl-C stops autoplay and
+  returns to manual input; invalid action files are rejected before session
+  creation. After the existing per-turn repair path fails, a player action is
+  retried at most twice. Exhaustion stops autoplay without advancing the
+  session head or skipping the next scripted action.
+  - Offline verification passed on 2026-09-26 (82 tests).
+
 - Added `/continue`, a single-turn autoplay command. It supplies the model
   with an explicit scene-continuation instruction, permits validated events
   arising from entity interactions, preserves player agency, and records the
@@ -150,8 +158,9 @@ Additional Milestone 1 behavior check:
 
 - `python -m local_adventure doctor` — PASS (placeholder diagnostic)
 
-Most recent passing test command: `python -m unittest discover -s tests -v`
-(59 tests, 2026-07-17).
+Most recent passing test command: `.venv/bin/python -m unittest discover -s tests -q`
+(82 tests, 2026-09-26). Compilation and `doctor` also passed; `doctor`
+reported the expected warnings for the unavailable LM Studio endpoint and token.
 
 Milestone 4 acceptance and required repository commands, run with `.venv`
 activated:

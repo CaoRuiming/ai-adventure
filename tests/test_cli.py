@@ -59,6 +59,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, 0)
         self.assertIn("doctor", output.getvalue())
 
+    def test_play_parser_accepts_actions_file_for_new_and_existing_sessions(self) -> None:
+        parser = cli.build_parser()
+        for selector in (["--world", "worlds/ember_hollow"], ["--session", "saved-id"]):
+            args = parser.parse_args(["play", *selector, "--actions-file", "actions.txt"])
+            self.assertEqual(args.actions_file, Path("actions.txt"))
+
     @patch("local_adventure.cli.LMStudioBackend.model_is_available", return_value=False)
     def test_doctor_reports_local_checks_when_model_is_unavailable(self, _model_available: object) -> None:
         output = io.StringIO()
@@ -189,6 +195,96 @@ class CliTests(unittest.TestCase):
                 raise EOFError
             self.assertEqual(cli.play_game(world_path=Path("worlds/ember_hollow"), input_fn=end_input, output=output), 0)
             self.assertIn("Type /help for commands.", output.getvalue())
+
+    @patch("local_adventure.cli.LMStudioBackend.generate")
+    def test_actions_file_plays_live_then_returns_to_interactive_input(self, generate: object) -> None:
+        generate.side_effect = [
+            ModelResponse(content=f'{{"narration":"Beat {number}.","events":[]}}', raw_response={"choices": []})
+            for number in range(1, 4)
+        ]
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"LOCAL_ADVENTURE_HOME": temporary}):
+            actions = Path(temporary) / "actions.txt"
+            actions.write_text("I greet Mark.\nI ask about the gate.\n", encoding="utf-8")
+            output = io.StringIO()
+            interactive = iter(["I wait.", "/quit"])
+            prompts: list[str] = []
+
+            def read_input(prompt: str) -> str:
+                prompts.append(prompt)
+                self.assertIn("Beat 2.", output.getvalue())
+                return next(interactive)
+
+            self.assertEqual(cli.play_game(world_path=Path("worlds/ember_hollow"), actions_file=actions,
+                                           input_fn=read_input, output=output), 0)
+            self.assertEqual(prompts, ["> ", "> "])
+            text = output.getvalue()
+            self.assertLess(text.index("> I greet Mark."), text.index("Beat 1."))
+            self.assertLess(text.index("> I ask about the gate."), text.index("Beat 2."))
+            self.assertIn("Recorded actions complete", text)
+            connection = open_connection(Path(temporary) / "local-adventure.sqlite3")
+            try:
+                inputs = [row[0] for row in connection.execute("SELECT player_input FROM turns ORDER BY turn_number")]
+                self.assertEqual(inputs, ["I greet Mark.", "I ask about the gate.", "I wait."])
+            finally:
+                connection.close()
+
+    @patch("local_adventure.cli.LMStudioBackend.generate")
+    def test_invalid_action_retries_twice_after_each_repair_path(self, generate: object) -> None:
+        generate.side_effect = [
+            ModelResponse(content="not json", raw_response={"choices": []}) for _ in range(4)
+        ] + [ModelResponse(content='{"narration":"Success.","events":[]}', raw_response={"choices": []})]
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"LOCAL_ADVENTURE_HOME": temporary}):
+            output = io.StringIO()
+            replies = iter(["I wait.", "/quit"])
+            self.assertEqual(cli.play_game(world_path=Path("worlds/ember_hollow"),
+                                           input_fn=lambda _prompt: next(replies), output=output), 0)
+            self.assertEqual(generate.call_count, 5)
+            self.assertIn("retrying action (1/2)", output.getvalue())
+            self.assertIn("retrying action (2/2)", output.getvalue())
+            self.assertIn("Success.", output.getvalue())
+            connection = open_connection(Path(temporary) / "local-adventure.sqlite3")
+            try:
+                self.assertEqual(connection.execute("SELECT COUNT(*) FROM turns").fetchone()[0], 1)
+            finally:
+                connection.close()
+
+    @patch("local_adventure.cli.LMStudioBackend.generate")
+    def test_autoplay_stops_after_retry_exhaustion_without_skipping_actions(self, generate: object) -> None:
+        generate.return_value = ModelResponse(content="not json", raw_response={"choices": []})
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"LOCAL_ADVENTURE_HOME": temporary}):
+            actions = Path(temporary) / "actions.txt"
+            actions.write_text("I wait.\nI walk away.\n", encoding="utf-8")
+            output = io.StringIO()
+            self.assertEqual(cli.play_game(world_path=Path("worlds/ember_hollow"), actions_file=actions,
+                                           input_fn=lambda _prompt: "/quit", output=output), 0)
+            self.assertEqual(generate.call_count, 6)
+            self.assertNotIn("> I walk away.", output.getvalue())
+            self.assertIn("Autoplay stopped", output.getvalue())
+            connection = open_connection(Path(temporary) / "local-adventure.sqlite3")
+            try:
+                self.assertEqual(connection.execute("SELECT COUNT(*) FROM turns").fetchone()[0], 0)
+            finally:
+                connection.close()
+
+    @patch("local_adventure.cli.LMStudioBackend.generate", side_effect=KeyboardInterrupt)
+    def test_interrupt_during_autoplay_returns_to_manual_input(self, generate: object) -> None:
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"LOCAL_ADVENTURE_HOME": temporary}):
+            actions = Path(temporary) / "actions.txt"
+            actions.write_text("I wait.\nI walk away.\n", encoding="utf-8")
+            output = io.StringIO()
+            self.assertEqual(cli.play_game(world_path=Path("worlds/ember_hollow"), actions_file=actions,
+                                           input_fn=lambda _prompt: "/quit", output=output), 0)
+            self.assertEqual(generate.call_count, 1)
+            self.assertNotIn("> I walk away.", output.getvalue())
+            self.assertIn("Autoplay interrupted", output.getvalue())
+
+    def test_invalid_actions_file_does_not_create_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"LOCAL_ADVENTURE_HOME": temporary}):
+            actions = Path(temporary) / "actions.txt"
+            actions.write_text("I wait.\n\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "line 2"):
+                cli.play_game(world_path=Path("worlds/ember_hollow"), actions_file=actions, output=io.StringIO())
+            self.assertFalse((Path(temporary) / "local-adventure.sqlite3").exists())
 
 
 if __name__ == "__main__":

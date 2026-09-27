@@ -16,9 +16,9 @@ from typing import Callable, TextIO
 from . import __version__
 from .content.loader import load_world
 from .content.models import LoadedWorld
-from .errors import LocalAdventureError, ModelError
+from .errors import LocalAdventureError, ModelError, ProposalValidationError
 from .app.game_service import GameService
-from .app.turn_service import TurnService
+from .app.turn_service import TurnResult, TurnService
 from .context.builder import ContextAssembly
 from .context.formatter import format_state
 from .export.session_exporter import SessionExporter
@@ -84,6 +84,8 @@ def build_parser() -> argparse.ArgumentParser:
     play_group.add_argument("--world", type=Path)
     play_parser.add_argument("--scenario")
     play_parser.add_argument("--name", default="First Journey")
+    play_parser.add_argument("--actions-file", type=Path, metavar="PATH",
+                             help="play one player action per line, then continue interactively")
     export_parser = subparsers.add_parser("export", help="export a session transcript and state")
     export_parser.add_argument("--session", required=True)
     export_parser.add_argument("--format", required=True, choices=("markdown", "json"))
@@ -268,13 +270,45 @@ def _print_context(context: ContextAssembly, output: TextIO) -> None:
     print(f"Raw prompts stored: {'yes' if diagnostics.raw_prompts_stored else 'no'}", file=output)
 
 
+def _load_actions(path: Path) -> list[str]:
+    """Read a turn script before creating or resuming a session."""
+    try:
+        lines = path.read_text(encoding="utf-8-sig").splitlines()
+    except (OSError, UnicodeError) as error:
+        raise ValueError(f"cannot read actions file {path}: {error}") from error
+    for number, line in enumerate(lines, 1):
+        if not line.strip():
+            raise ValueError(f"actions file {path}, line {number}: player action is empty")
+        if line.startswith("/"):
+            raise ValueError(f"actions file {path}, line {number}: in-game commands are not player actions")
+        if len(line) > 16_000:
+            raise ValueError(f"actions file {path}, line {number}: player action exceeds 16,000 characters")
+    return lines
+
+
+def _submit_with_auto_retry(turn_service: TurnService, session_id: str, action: str, output: TextIO) -> TurnResult:
+    """Retry an invalid action at most twice after its normal repair path."""
+    for retry in range(3):
+        try:
+            return turn_service.submit_turn(session_id, action)
+        except ProposalValidationError:
+            if retry == 2:
+                raise
+            print(f"Invalid model response; retrying action ({retry + 1}/2).", file=output, flush=True)
+    raise AssertionError("unreachable")
+
+
 def play_game(
     *, world_path: Path | None = None, session_id: str | None = None, scenario_id: str | None = None,
-    name: str = "First Journey", input_fn: Callable[[str], str] = input, output: TextIO | None = None,
+    name: str = "First Journey", actions_file: Path | None = None,
+    input_fn: Callable[[str], str] = input, output: TextIO | None = None,
 ) -> int:
     """Run one synchronous terminal session; all state changes stay in app services."""
     _enable_line_editing()
     output = output or sys.stdout
+    scripted_actions = _load_actions(actions_file) if actions_file is not None else []
+    next_scripted_action = iter(scripted_actions)
+    autoplay = bool(scripted_actions)
     connection = _connection()
     try:
         if session_id:
@@ -299,9 +333,24 @@ def play_game(
         while True:
             print("", file=output)
             try:
-                _notify_prompt_ready(output)
-                line = input_fn("> ")
+                if autoplay:
+                    try:
+                        line = next(next_scripted_action)
+                    except StopIteration:
+                        autoplay = False
+                        print("Recorded actions complete; enter your next action.", file=output, flush=True)
+                        _notify_prompt_ready(output)
+                        line = input_fn("> ")
+                    else:
+                        print(f"> {line}", file=output, flush=True)
+                else:
+                    _notify_prompt_ready(output)
+                    line = input_fn("> ")
             except (EOFError, KeyboardInterrupt):
+                if autoplay:
+                    autoplay = False
+                    print("Autoplay interrupted; enter actions manually.", file=output, flush=True)
+                    continue
                 print("", file=output)
                 return 0
             print("", file=output)
@@ -399,17 +448,26 @@ def play_game(
                     print("Unknown command. Type /help for available commands.", file=output)
                 continue
             try:
-                result = turn_service.submit_turn(session.session_id, line)
+                result = _submit_with_auto_retry(turn_service, session.session_id, line, output)
             except KeyboardInterrupt:
                 print("Model request cancelled; no turn was saved.", file=output)
+                if autoplay:
+                    autoplay = False
+                    print("Autoplay interrupted; enter actions manually.", file=output, flush=True)
                 continue
             except LocalAdventureError as error:
                 print(f"Error: {error}", file=output)
                 if debug:
                     print("No state changes were committed for this action.", file=output)
+                if autoplay:
+                    autoplay = False
+                    print("Autoplay stopped; enter actions manually.", file=output, flush=True)
                 continue
             last_context = result.context
-            print(_wrap(result.narration, output), file=output)
+            print(_wrap(result.narration, output), file=output, flush=True)
+    except KeyboardInterrupt:
+        print("\nPlay interrupted.", file=output)
+        return 0
     finally:
         connection.close()
 
@@ -484,7 +542,8 @@ def main(argv: list[str] | None = None) -> int:
                 return run_sessions_list()
             return run_sessions_create(args.world, args.scenario, args.name)
         if args.command == "play":
-            return play_game(world_path=args.world, session_id=args.session, scenario_id=args.scenario, name=args.name)
+            return play_game(world_path=args.world, session_id=args.session, scenario_id=args.scenario,
+                             name=args.name, actions_file=args.actions_file)
         if args.command == "export":
             return run_export(args.session, args.format, args.output)
     except (LocalAdventureError, ValueError) as error:

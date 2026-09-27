@@ -50,6 +50,20 @@ python -m local_adventure sessions list
 python -m local_adventure play --session SESSION_ID
 ```
 
+For repeatable playthroughs, add `--actions-file PATH` to either `play` form.
+The UTF-8 text file contains one player action per line. The game shows each
+action and its committed narration as it plays, then prompts for normal input
+after the last line. Press Ctrl-C during autoplay to stop it and enter actions
+manually. Empty lines and in-game commands are rejected; use the file for
+player actions only. If an action's model response remains invalid after its
+configured repair attempt, play retries that same action up to two more times.
+If it still fails, no turn is saved for that action and autoplay stops at the
+interactive prompt. Transport errors are reported without automatic retry.
+
+```bash
+python -m local_adventure play --world worlds/ember_hollow --actions-file actions.txt
+```
+
 Inside play, these commands manage the current session:
 
 ```text
